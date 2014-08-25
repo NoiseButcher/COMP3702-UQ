@@ -18,10 +18,6 @@ main = do
             endXY = makeConfig $ words xy
             obstacles = processMap xz
             nASV' = read nASV :: Int
---        print nASV'
---        print startXY
---        print endXY
---        print obstacles
         roadMap startXY endXY obstacles
 
 
@@ -66,8 +62,8 @@ checkCollision obstacles node
 roadMap :: [(Float, Float)] -> [(Float, Float)] -> [[(Float, Float)]] -> IO ()
 roadMap start goal obstacles = do
                         {-Start by randomly generating an amount of points on the map = 20*number os ASVs-}
-                        let seedn = length start
-                            points = take (20*seedn) $ randomRs (1, 100) (mkStdGen (seedn)) :: [Integer]
+                        let seedn = (length start * length obstacles)
+                            points = take (seedn*50) $ randomRs (1, 100) (mkStdGen (seedn)) :: [Integer]
                             points' = map ((/100) . fromInteger) points
                             points'' = randomPairs points'
 
@@ -77,10 +73,14 @@ roadMap start goal obstacles = do
                             {-Begin processing paths, first check that the path to a point
                              is possible-}
                             failBus = paveRoads (head start : legalPoints ++ [head goal]) (legalPoints ++ [head goal]) obstacles
-                            failBus' = filter ((>0.05) . pull3) failBus
-                        print start
-                        print goal
-                        mapM_ print failBus'
+--                            failBus' = filter ((>0.06) . pull3) failBus
+                            failBus''= group $ sort failBus
+                            noRepeat = map head failBus''
+--                        print start
+--                        print goal
+--                        print failBus
+--                        mapM_ print noRepeat
+                        uCS noRepeat [] [start !! 0] (head goal)
 
 randomPairs :: [Float] -> [(Float, Float)]
 randomPairs input = case input of [] -> []
@@ -116,16 +116,19 @@ getCost pointA pointB = sqrt((fst pointA - fst pointB)**2 + (snd pointA - snd po
 
 --Function to asses paths between points, and return a list with costs in it.
 makePath :: (Float, Float) -> (Float, Float) -> ((Float, Float), (Float, Float), Float)
-makePath pointA pointB = (pointA, pointB, getCost pointA pointB)
+makePath pointA pointB
+                | fst pointA < fst pointB = (pointA, pointB, getCost pointA pointB)
+                | otherwise = (pointB, pointA, getCost pointA pointB)
 
 paveRoads :: [(Float, Float)] -> [(Float, Float)] -> [[(Float, Float)]] -> [((Float, Float), (Float, Float), Float)]
 paveRoads points1 points2 obstacles
-                | length points1 == 1 = [z]
-                | x == True = z : paveRoads points' points2 obstacles
-                | otherwise = paveRoads points' points2 obstacles
+                | length points1 == 2 = [z]
+                | x == True = z : paveRoads points' points2' obstacles
+                | otherwise = paveRoads points' points2' obstacles
                     where x = checkPath a b obstacles
                           a = head points1
                           points' = tail points1
+                          points2' = filter (/=a) points2
                           b = nodeSniffer a (filter (/=a) points2)
                           z = makePath a b
 
@@ -144,14 +147,78 @@ pull2 (_,b,_) = b
 pull1 :: (a, b, c) -> a
 pull1 (a,_,_) = a
 
-uCS :: [((Float, Float), (Float, Float), Float)] -> (Float, Float) -> (Float, Float) -> IO()
-uCS paths start finish = do
-                print "Bacon"
+uCS :: [((Float, Float), (Float, Float), Float)] -> [((Float, Float), (Float, Float), Float)] -> [(Float, Float)] -> (Float, Float) -> IO()
+uCS paths output start finish =
+                if (elem finish start') == True
+                    then do
+                           let x = traceBack output' (start' !! (length start' - 1)) finish
+                           print x
+                           print output'
+                    else do
+--                         print output'
+                         print start'
+--                         print cheapest
+--                         print adjacent
+--                         print newCosts'
+--                         print newmap''
+                         uCS newmap'' output' start' finish
+                        where   cheapest = shortPath $ filter (pathContains start) paths
+                                adjacent = filter (pathContains [(backDoor start cheapest)]) paths
+                                newCosts' = map (updateCost (pull3 cheapest)) newCosts
+                                newCosts = filter (notPath [cheapest]) adjacent
+                                newmap' = filter (notPath adjacent) newmap
+                                newmap = filter (/= cheapest) paths
+                                newmap'' = newmap' ++ newCosts'
+                                output' = cheapest : output
+                                start' = (backDoor start cheapest) : start
 
-isGoal :: ((Float, Float), (Float, Float), Float) -> (Float, Float) -> Bool
-isGoal pathXYC pointXY
-                | x == pointXY = True
-                | y == pointXY = True
+pathContains :: [(Float, Float)] -> ((Float, Float), (Float, Float), Float) -> Bool
+pathContains pointXY pathXYC
+                | x == True = True
+                | y == True = True
                 | otherwise  = False
-                    where x = pull1 pathXYC
-                          y = pull2 pathXYC
+                    where x = elem (pull1 pathXYC) pointXY
+                          y = elem (pull2 pathXYC) pointXY
+
+pathNotContain :: [(Float, Float)] -> ((Float, Float), (Float, Float), Float) -> Bool
+pathNotContain pointXY pathXYC
+                | x == True = False
+                | y == True = False
+                | otherwise  = True
+                    where x = elem (pull1 pathXYC) pointXY
+                          y = elem (pull2 pathXYC) pointXY
+
+updateCost :: Float -> ((Float, Float), (Float, Float), Float) -> ((Float, Float), (Float, Float), Float)
+updateCost pathCost pathEnd = (x, y, z) where x = pull1 pathEnd
+                                              y = pull2 pathEnd
+                                              z = pathCost + pull3 pathEnd
+
+backDoor :: [(Float, Float)] -> ((Float, Float), (Float, Float), Float) -> (Float, Float)
+backDoor input node
+            | input' == True = pull2 node
+            | otherwise = pull1 node
+                where input' = elem (pull1 node) input
+
+shortPath :: [((Float, Float), (Float, Float), Float)] -> ((Float, Float), (Float, Float), Float)
+shortPath paths
+            | length paths < 2 = head paths
+            | x > y = shortPath (head paths : drop 2 paths)
+            | otherwise = shortPath (drop 1 paths)
+                    where x = pull3 (paths !! 0)
+                          y = pull3 (paths !! 1)
+
+notPath :: [((Float, Float), (Float, Float), Float)] -> ((Float, Float), (Float, Float), Float) -> Bool
+notPath outList input
+            | head outList == input = False
+            | length outList == 1 = True
+            | otherwise = notPath outList' input
+                where outList' = tail outList
+
+traceBack :: [((Float, Float), (Float, Float), Float)] -> (Float, Float) -> (Float, Float) -> [((Float, Float), (Float, Float), Float)]
+traceBack nodeList target start
+                | x == True = [z]
+                | otherwise = z : traceBack nodeList' target start'
+                    where   x = pathContains [target] z
+                            z = shortPath $ filter (pathContains [start]) nodeList
+                            nodeList' = dropWhile (pathNotContain [start]) nodeList
+                            start' = backDoor [start] z
