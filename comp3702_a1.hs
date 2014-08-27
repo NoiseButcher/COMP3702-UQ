@@ -151,17 +151,16 @@ uCS :: [((Float, Float), (Float, Float), Float)] -> [((Float, Float), (Float, Fl
 uCS paths output start finish =
                 if (elem finish start') == True
                     then do
-                           let x = traceBack output' (start' !! (length start' - 1)) finish
-                           print x
-                           print output'
+--                           print outputx
+                           let x = group . sort $ foldl breakNodes [] outputx
+                               x'= map head $ cullNodes x
+                               y = takeWhile (/= finish) $ tail x'
+                               y' = filter (pathNotContain y) outputx
+                               tCost = sum $ map pull3 y'
+                           print y'
+                           print tCost
                     else do
---                         print output'
-                         print start'
---                         print cheapest
---                         print adjacent
---                         print newCosts'
---                         print newmap''
-                         uCS newmap'' output' start' finish
+                         uCS newmap'' outputx start' finish
                         where   cheapest = shortPath $ filter (pathContains start) paths
                                 adjacent = filter (pathContains [(backDoor start cheapest)]) paths
                                 newCosts' = map (updateCost (pull3 cheapest)) newCosts
@@ -169,8 +168,9 @@ uCS paths output start finish =
                                 newmap' = filter (notPath adjacent) newmap
                                 newmap = filter (/= cheapest) paths
                                 newmap'' = newmap' ++ newCosts'
-                                output' = cheapest : output
+                                outputx = cheapest : output
                                 start' = (backDoor start cheapest) : start
+                                startx = start' !! (length start' - 1)
 
 pathContains :: [(Float, Float)] -> ((Float, Float), (Float, Float), Float) -> Bool
 pathContains pointXY pathXYC
@@ -216,9 +216,29 @@ notPath outList input
 
 traceBack :: [((Float, Float), (Float, Float), Float)] -> (Float, Float) -> (Float, Float) -> [((Float, Float), (Float, Float), Float)]
 traceBack nodeList target start
+--                | length extraneous < 2 = [z]
                 | x == True = [z]
                 | otherwise = z : traceBack nodeList' target start'
                     where   x = pathContains [target] z
                             z = shortPath $ filter (pathContains [start]) nodeList
-                            nodeList' = dropWhile (pathNotContain [start]) nodeList
                             start' = backDoor [start] z
+                            delim = backDoor [start'] z
+                            nodeList' = filter (/= z) nodeList
+
+--hasLink :: [] -> []
+--hasLink inList
+--        | length x == 0 = [z]
+--        | otherwise
+--            where x = group $ foldl breakNodes [] inList
+
+
+breakNodes :: [(Float, Float)] -> ((Float, Float), (Float, Float), Float) -> [(Float, Float)]
+breakNodes initList node = pull1 node : pull2 node : initList
+
+cullNodes :: [[(Float, Float)]] -> [[(Float, Float)]]
+cullNodes inList
+            | length inList < 2 = [z]
+            | length z == 1 = z : cullNodes inList'
+            | otherwise = cullNodes inList'
+                where z = head inList
+                      inList' = tail inList
