@@ -6,6 +6,7 @@ import Control.Monad
 import Numeric
 import System.Random
 import Data.Fixed
+import GHC.Float.RealFracMethods
 
 --Main do loop to run the program; extracts arguments, processes inputs and sends to map evaluation
 --functions.
@@ -29,26 +30,49 @@ roadMap :: [(Float, Float)] -> [(Float, Float)] -> [[(Float, Float)]] -> IO ()
 roadMap start goal obstacles = do
                         {-Start by randomly generating an amount of points on the map = 20*number os ASVs-}
                         let seedn = (length start * length obstacles)
-                            points = take (seedn*50) $ randomRs (1, 100) (mkStdGen (seedn)) :: [Integer]
+                            points = take (seedn*20) $ randomRs (1, 100) (mkStdGen (seedn)) :: [Integer]
                             points' = map ((/100) . fromInteger) points
                             points'' = randomPairs points'
 
                             {-Filter points that would be in the forbidden zone-}
                             legalPoints = filter (checkCollision obstacles) points''
 
+                            nASV = length start
+                            limitsX = getBounds nASV
+                            start' = findCentre start
+                            end' = findCentre goal
+                            nASV' = int2Float nASV
+
+                            tester = configA start' nASV' nASV' (head relevant)
+
                             {-Begin processing paths, first check that the path to a point
                              is possible-}
-                            failBus = paveRoads (head start : legalPoints ++ [head goal]) (legalPoints ++ [head goal]) obstacles
+                            failBus = paveRoads (start' : legalPoints ++ [end']) (legalPoints ++ [end']) obstacles
                             failBus'= group $ sort failBus
                             noRepeat = map head failBus'
---                        print start
---                        print goal
---                        print failBus
---                        mapM_ print noRepeat
-                        uCS noRepeat [] [start !! 0] (head goal)
+
+                            bestPath = uCS noRepeat [] [start'] end' obstacles
+                            tCost = sum $ map pull3 bestPath
+                            widthsX = map (plotPathWidths obstacles) bestPath
+                            widthsX' = map (setBounds (fst limitsX)) widthsX
+                            slopeslol = getGradients start' bestPath
+                            angles = processAngles slopeslol start' bestPath
+                            xTraverse = xTravel' start' bestPath
+                            relevant = pathDeets widthsX' xTraverse slopeslol
+
+                        putStr "Start: "
+                        print start'
+                        putStr "Goal: "
+                        print end'
+                        print tester
+--                        mapM_ print relevant
+--                        mapM_ print xTraverse
+                        mapM_ print bestPath
 
 --Forms paths from the sampled points based on obstacle locations and allowable proximity.
-paveRoads :: [(Float, Float)] -> [(Float, Float)] -> [[(Float, Float)]] -> [((Float, Float), (Float, Float), Float)]
+paveRoads :: [(Float, Float)] -> [(Float, Float)] ->
+             [[(Float, Float)]] ->
+             [((Float, Float), (Float, Float), Float)]
 paveRoads points1 points2 obstacles
                 | length points1 == 2 = [z]
                 | x == True = z : paveRoads points' points2' obstacles
@@ -61,19 +85,24 @@ paveRoads points1 points2 obstacles
                           z = makePath a b
 
 --This is a uniform cost search. Duh.
-uCS :: [((Float, Float), (Float, Float), Float)] -> [((Float, Float), (Float, Float), Float)] -> [(Float, Float)] -> (Float, Float) -> IO()
-uCS paths output start finish =
+uCS :: [((Float, Float), (Float, Float), Float)] ->
+       [((Float, Float), (Float, Float), Float)] ->
+       [(Float, Float)] ->
+       (Float, Float) ->
+       [[(Float, Float)]] ->
+--       IO()
+       [((Float, Float), (Float, Float), Float)]
+uCS paths output start finish obstacles =
                 if (elem finish start') == True
                     then do
                            let x = group . sort $ foldl breakNodes [] outputx
                                x'= map head $ cullNodes x
-                               y = takeWhile (/= finish) $ tail x'
-                               y' = filter (pathNotContain y) outputx
-                               tCost = sum $ map pull3 y'
-                           print y'
-                           print tCost
+                               y = filter (/= start' !! (length start' - 1)) $ takeWhile (/= finish) $ x'
+                               y' = reverse $ filter (pathNotContain y) outputx
+                           y'
+
                     else do
-                         uCS newmap'' outputx start' finish
+                         uCS newmap'' outputx start' finish obstacles
                         where   cheapest = shortPath $ filter (pathContains start) paths
                                 adjacent = filter (pathContains [(backDoor start cheapest)]) paths
                                 newCosts' = map (updateCost (pull3 cheapest)) newCosts
@@ -117,6 +146,30 @@ isCollision posXY fZone
                       c = snd (fZone !! 1) - 0.05
                       d = snd (fZone !! 2) + 0.05
 
+dist2Obstacle :: [[(Float, Float)]] -> (Float, Float)-> [Float]
+dist2Obstacle fZone node
+                | length fZone < 2 = [minDist]
+                | otherwise        = minDist : dist2Obstacle fZone' node
+                      where z = map (dist2ASV node) $ head fZone
+                            fZone' = tail fZone
+                            minDist = minimum z
+
+getPathwidth :: [[(Float, Float)]] -> (Float, Float) -> (Float, Float) -> Float
+getPathwidth fZone pointA pointB
+                    | length xs == 0 = 0.05
+                    | otherwise =     minimum xs
+                            where xs = map (minimum . dist2Obstacle fZone) lineEq
+                                  xlist = [fst pointA, (fst pointA + 0.05) .. fst pointB]
+                                  ylist = [snd pointA, (snd pointA + 0.05) .. snd pointB]
+                                  grad = (snd pointB - snd pointA)/(fst pointB - fst pointA)
+                                  beta = (snd pointA) - grad*(fst pointA)
+                                  lineEq = [ ((y - beta)/grad, grad*x + beta) | x <- xlist, y <- ylist]
+
+plotPathWidths :: [[(Float, Float)]] -> ((Float,Float), (Float, Float), Float) -> Float
+plotPathWidths fZone path = getPathwidth fZone (pull1 path) (pull2 path)
+
+
+
 checkCollision :: [[(Float, Float)]] -> (Float, Float) -> Bool
 checkCollision obstacles node
                     | (notElem True x) = True
@@ -148,8 +201,10 @@ nodeSniffer start points
                    | length points == 1 = head points
                    | prox1 > prox2 = nodeSniffer start (drop 1 points)
                    | otherwise  = nodeSniffer start (head points : drop 2 points)
-                        where prox1 = abs(fst start - fst (points !! 0)) + abs(snd start - snd (points !! 0))
-                              prox2 = abs(fst start - fst (points !! 1)) + abs(snd start - snd (points !! 1))
+                        where prox1 = abs(fst start - fst (points !! 0)) +
+                                      abs(snd start - snd (points !! 0))
+                              prox2 = abs(fst start - fst (points !! 1)) +
+                                      abs(snd start - snd (points !! 1))
 
 --Returns the cost of travelling between two nodes.
 getCost :: (Float, Float) -> (Float, Float) -> Float
@@ -229,16 +284,27 @@ cullNodes inList
                 where z = head inList
                       inList' = tail inList
 
---formConfig :: [(Float, Float)] -> (Float, Float) -> [[(Float, Float)]] -> [(Float, Float)]
---formConfig input target obstacles
-                --See how close to obstacle a path is, then adjust the width of the config
-                --if bestMove !isCollision then make that move with the first one.
-                --bestMove if !isCollision and dist2ASV (n - 1) <= 0.05 then make that move.
-                --
-
 dist2ASV :: (Float, Float) -> (Float, Float) -> Float
 dist2ASV pointA pointB = sqrt (a**2 + b**2) where a = abs(fst pointA - fst pointB)
                                                   b = abs(snd pointA - snd pointB)
+
+gradient :: (Float, Float) -> (Float, Float) -> Float
+gradient pointA pointB =  b/a where a = (fst pointB - fst pointA)
+                                    b = (snd pointB - snd pointA)
+
+getGradients :: (Float, Float) -> [((Float, Float), (Float, Float), Float)] -> [Float]
+getGradients start paths = case paths of [] -> []
+                                         x -> x' : getGradients start' paths'
+                                            where x' = gradient start start'
+                                                  start' = backDoor [start] $ head paths
+                                                  paths' = tail paths
+
+xTravel' :: (Float, Float) -> [((Float, Float), (Float, Float), Float)] -> [Float]
+xTravel' start paths = case paths of [] -> []
+                                     x -> x' : xTravel' start' paths'
+                                         where x' = xTravel start start'
+                                               start' = backDoor [start] $ head paths
+                                               paths' = tail paths
 
 bestMove :: (Float, Float) -> (Float, Float) -> (Float, Float)
 bestMove pointA pointB
@@ -254,9 +320,81 @@ bestMove pointA pointB
 
 findCentre :: [(Float, Float)] -> (Float, Float)
 findCentre config
-        | odd x == True  = config !! (x - (x + 1)/2)
+        | odd x == True  = config !! (x - z')
         | otherwise      = (a, b)
                 where x = length config
-                      x' = x - (x+1)/2
-                      a = {-config x/2, config x/2 + 1 -}
-                      b = {-Something to do with that ^^^^^ -}
+                      z = floor $ (int2Float x)/2
+                      z' = ceiling $ (int2Float x)/2
+                      deltax = fst (config !! z) - fst (config !! z')
+                      deltay = snd (config !! z) - snd (config !! z')
+                      a = fst (config !! z) + deltax/2
+                      b = snd (config !! z) + deltay/2
+
+xTravel :: (Float, Float) -> (Float, Float) -> Float
+xTravel pointA pointB = snd pointB - snd pointA
+
+getAnglePos :: (Float, Float) -> (Float, Float) -> Float
+getAnglePos pointA pointB = 57.29 * atan (y/x) where x = abs(fst pointB - fst pointA)
+                                                     y = abs(snd pointB - snd pointA)
+
+getAnglePos' :: ((Float, Float), (Float, Float), Float) -> Float
+getAnglePos' path = getAnglePos (pull1 path) (pull2 path)
+
+getAngleNeg :: (Float, Float) -> (Float, Float) -> Float
+getAngleNeg pointA pointB = 57.29 * atan (x/y) where x = abs(fst pointB - fst pointA)
+                                                     y = abs(snd pointB - snd pointA)
+
+getAngleNeg' :: ((Float, Float), (Float, Float), Float) -> Float
+getAngleNeg' path = getAnglePos (pull1 path) (pull2 path)
+
+processAngles :: [Float] -> (Float, Float) -> [((Float, Float), (Float, Float), Float)] -> [Float]
+processAngles slopes start paths
+            | length paths < 2 = [z]
+            | head slopes > 0  = z : processAngles slopes' lead paths'
+            | otherwise        = y : processAngles slopes' lead paths'
+                where z = getAnglePos start lead
+                      y = getAngleNeg start lead
+                      lead = backDoor [start] $ head paths
+                      slopes' = tail slopes
+                      paths' = tail paths
+
+configA :: (Float, Float) -> Float -> Float -> (Float, Float, Float) -> [(Float, Float)]
+configA centre nASV total pathinfo
+            | nASV < 2           = [(a, b)]
+            | nASV > (total/2)   = (a, b) : configA centre nASV' total pathinfo
+            | otherwise          = (c, d) : configA centre nASV' total pathinfo
+               where alpha = dist2ASV centre (0, 0)
+                     theta = atan ( pull1 pathinfo / alpha)
+                     phi = theta / num
+                     omega = 90.0 / num
+                     delta = pull1 pathinfo / num
+                     delta' = delta * num - delta * nASV'
+                     mult = total - nASV
+                     mult' = num - nASV
+                     a = fst centre - ((pull1 pathinfo - mult*delta) * (sin theta))
+                     b = snd centre + ((pull1 pathinfo - mult*delta) * (cos theta))
+                     c = fst centre + ((pull1 pathinfo + mult'*delta) * (sin theta))
+                     d = snd centre - ((pull1 pathinfo + mult'*delta) * (cos theta))
+                     num = total / 2
+                     nASV' = nASV - 1
+
+
+pathDeets :: [Float] -> [Float] -> [Float] -> [(Float, Float, Float)]
+pathDeets widths angles grads
+            | length widths < 2 = [(a, b, c)]
+            | otherwise         = (a, b, c) : pathDeets widths' angles' grads'
+                       where a = head widths
+                             b = head angles
+                             c = head grads
+                             widths' = tail widths
+                             angles' = tail angles
+                             grads' = tail grads
+
+getBounds :: Int -> (Float, Float)
+getBounds nASV = (rMax,  bMin) where rMax = (int2Float $ 15*nASV) / 1000
+                                     bMin = (int2Float $ 2*nASV*nASV - 4*nASV) / 1000
+
+setBounds :: Float -> Float -> Float
+setBounds a b
+        | a > b = b
+        | otherwise = a
