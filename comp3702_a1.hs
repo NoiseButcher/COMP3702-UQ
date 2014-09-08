@@ -60,7 +60,7 @@ roadMap start goal obstacles = do
                             xTraverse = xTravel' start' bestPath
                             relevant = pathDeets widthsX' xTraverse slopeslol
 
-                            theRealDeal = filthWizard start goal configs
+                            theRealDeal = filthWizard start goal (configs ++ [goal])
 
 --                        putStr "Start: "
 --                        print start'
@@ -310,11 +310,12 @@ xTravel' start paths = case paths of [] -> []
 
 bestMove :: (Float, Float) -> (Float, Float) -> (Float, Float)
 bestMove pointA pointB
-        | (0.001 > y') && (x' < 0.001) = pointB
-        | x' > y' && x < 1     = (fst pointB + 0.001, snd pointB)
-        | x' > y' && x > 1     = (fst pointB - 0.001, snd pointB)
-        | x' < y' && y < 1     = (fst pointB, snd pointB + 0.001)
-        | otherwise            = (fst pointB, snd pointB - 0.001)
+        | (0.002 > y') && (x' < 0.002) = pointA
+        | (x' > y') && (x < 0)     = (fst pointB + 0.001, snd pointB)
+        | (x' > y') && (x > 0)     = (fst pointB - 0.001, snd pointB)
+        | (x' < y') && (y < 0)     = (fst pointB, snd pointB + 0.001)
+        | (x' < y') && (y > 0)     = (fst pointB, snd pointB - 0.001)
+        | otherwise            = (fst pointB + 0.001, snd pointB - 0.001)
             where x  = fst pointB - fst pointA
                   y  = snd pointB - snd pointA
                   x' = abs x
@@ -534,10 +535,9 @@ filthWizard startState endState configs
         | z == endState = [z]
         | z == alpha = z : filthWizard z endState configs'
         | otherwise = z : filthWizard z endState configs
-                let xs = configs ++ [endstate]
-                    alpha = head xs
-                    z = bestMove' startState alpha
-                    configs' = tail configs
+                where alpha = head configs
+                      z = bestMove' alpha startState
+                      configs' = tail configs
 
 angleCreep :: Float -> Float -> Float -> Float
 angleCreep minAngle delta mult
