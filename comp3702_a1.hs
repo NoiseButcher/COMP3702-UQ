@@ -30,7 +30,7 @@ roadMap :: [(Float, Float)] -> [(Float, Float)] -> [[(Float, Float)]] -> IO ()
 roadMap start goal obstacles = do
                         {-Start by randomly generating an amount of points on the map = 20*number os ASVs-}
                         let seedn = (length start * length obstacles)
-                            points = take (seedn*20) $ randomRs (1, 100) (mkStdGen (seedn)) :: [Integer]
+                            points = take (seedn*seedn + 10) $ randomRs (1, 100) (mkStdGen (seedn)) :: [Integer]
                             points' = map ((/100) . fromInteger) points
                             points'' = randomPairs points'
 
@@ -53,6 +53,7 @@ roadMap start goal obstacles = do
 
                             bestPath = uCS noRepeat [] [start'] end' obstacles
                             tCost = sum $ map pull3 bestPath
+                            tCostStr = show tCost
                             widthsX = map (plotPathWidths obstacles) bestPath
                             widthsX' = map (setBounds (fst limitsX)) widthsX
                             slopeslol = getGradients start' bestPath
@@ -60,16 +61,17 @@ roadMap start goal obstacles = do
                             xTraverse = xTravel' start' bestPath
                             relevant = pathDeets widthsX' xTraverse slopeslol
 
-                            theRealDeal = filthWizard start goal (configs ++ [goal])
+                            theRealDeal = start : filthWizard start goal (configs ++ [goal])
+                            theRealDeal' = map formatOut theRealDeal
+                            stepCount = length theRealDeal - 1
+                            stepCountStr = show stepCount
 
---                        putStr "Start: "
---                        print start'
---                        putStr "Goal: "
---                        print end'
-                        mapM_ print theRealDeal
---                        mapM_ print relevant
---                        mapM_ print xTraverse
---                        mapM_ print bestPath
+                            fileHead = stepCountStr ++ " " ++ tCostStr
+
+                        output <- openFile "out.txt" WriteMode
+                        hPutStrLn output fileHead
+                        mapM_ (hPutStrLn output) theRealDeal'
+                        hClose output
 
 --Forms paths from the sampled points based on obstacle locations and allowable proximity.
 paveRoads :: [(Float, Float)] -> [(Float, Float)] ->
@@ -92,7 +94,6 @@ uCS :: [((Float, Float), (Float, Float), Float)] ->
        [(Float, Float)] ->
        (Float, Float) ->
        [[(Float, Float)]] ->
---       IO()
        [((Float, Float), (Float, Float), Float)]
 uCS paths output start finish obstacles =
                 if (elem finish start') == True
@@ -143,10 +144,10 @@ isCollision posXY fZone
             | otherwise = False
                 where x = fst posXY
                       y = snd posXY
-                      a = fst (fZone !! 0) - 0.05
-                      b = fst (fZone !! 1) + 0.05
-                      c = snd (fZone !! 1) - 0.05
-                      d = snd (fZone !! 2) + 0.05
+                      a = fst (fZone !! 0) - 0.1
+                      b = fst (fZone !! 1) + 0.1
+                      c = snd (fZone !! 1) - 0.1
+                      d = snd (fZone !! 2) + 0.1
 
 dist2Obstacle :: [[(Float, Float)]] -> (Float, Float)-> [Float]
 dist2Obstacle fZone node
@@ -161,8 +162,8 @@ getPathwidth fZone pointA pointB
                     | length xs == 0 = 0.05
                     | otherwise =     minimum xs
                             where xs = map (minimum . dist2Obstacle fZone) lineEq
-                                  xlist = [fst pointA, (fst pointA + 0.05) .. fst pointB]
-                                  ylist = [snd pointA, (snd pointA + 0.05) .. snd pointB]
+                                  xlist = [fst pointA, (fst pointA + 0.01) .. fst pointB]
+                                  ylist = [snd pointA, (snd pointA + 0.01) .. snd pointB]
                                   grad = (snd pointB - snd pointA)/(fst pointB - fst pointA)
                                   beta = (snd pointA) - grad*(fst pointA)
                                   lineEq = [ ((y - beta)/grad, grad*x + beta) | x <- xlist, y <- ylist]
@@ -190,8 +191,8 @@ checkPath :: (Float, Float) -> (Float, Float) -> [[(Float, Float)]] -> Bool
 checkPath pointA pointB obstacles
     | (length lineEq) == (length canPass) = True
     | otherwise = False
-        where xlist = [fst pointA, (fst pointA + 0.05) .. fst pointB]
-              ylist = [snd pointA, (snd pointA + 0.05) .. snd pointB]
+        where xlist = [fst pointA, (fst pointA + 0.005) .. fst pointB]
+              ylist = [snd pointA, (snd pointA + 0.005) .. snd pointB]
               grad = (snd pointB - snd pointA)/(fst pointB - fst pointA)
               beta = (snd pointA) - grad*(fst pointA)
               lineEq = [ ((y - beta)/grad, grad*x + beta) | x <- xlist, y <- ylist]
@@ -310,12 +311,12 @@ xTravel' start paths = case paths of [] -> []
 
 bestMove :: (Float, Float) -> (Float, Float) -> (Float, Float)
 bestMove pointA pointB
-        | (0.002 > y') && (x' < 0.002) = pointA
+        | (0.001 > y') && (x' < 0.001) = pointA
         | (x' > y') && (x < 0)     = (fst pointB + 0.001, snd pointB)
         | (x' > y') && (x > 0)     = (fst pointB - 0.001, snd pointB)
         | (x' < y') && (y < 0)     = (fst pointB, snd pointB + 0.001)
         | (x' < y') && (y > 0)     = (fst pointB, snd pointB - 0.001)
-        | otherwise            = (fst pointB + 0.001, snd pointB - 0.001)
+        | otherwise            = (fst pointB + 0.001, snd pointB)
             where x  = fst pointB - fst pointA
                   y  = snd pointB - snd pointA
                   x' = abs x
@@ -336,15 +337,8 @@ calcAngle nASV ratioRad
             where nASV' = nASV - 1
                   z = ratioRad**nASV'
 
-followPath :: (Float, Float) -> (Float, Float) -> [(Float, Float)] -> [[(Float, Float)]]
-followPath start end configIn
-                | (dx < 0.009) && (dy < 0.009) = [z']
-                | otherwise =  z' : followPath z end z'
-                    where z = bestMove end start
-                          z' = map (bestMove z) configIn
-                          dx = abs(fst start - fst end)
-                          dy = abs(snd start - snd end)
-
+formatOut :: [(Float, Float)] -> String
+formatOut points = foldl (++) [] (map (\(a, b) -> show a ++ " " ++ show b ++ " ") points)
 
 findCentre :: [(Float, Float)] -> (Float, Float)
 findCentre config
@@ -386,114 +380,14 @@ processAngles slopes start paths
                       slopes' = tail slopes
                       paths' = tail paths
 
-configA :: (Float, Float) -> Float -> Float -> (Float, Float, Float) -> [(Float, Float)]
-configA centre nASV total pathinfo
-            | nASV < 2           = [(a, b)]
-            | nASV > (total/2)   = (a, b) : configA centre nASV' total pathinfo
-            | otherwise          = (c, d) : configA centre nASV' total pathinfo
-               where theta = atan ( snd centre / fst centre)
-                     pWidth = pull1 pathinfo
-                     bRad = (49/pWidth)*(total - 1)**2 / 1000
-                     delta = bRad / pWidth
-                     dRad = (bRad - pWidth)/num
-                     minAngle = calcAngle num delta
-                     mult = total - nASV
-                     mult' = num - nASV
-                     a = fst centre - ((pWidth + mult*dRad) * (sin (minAngle**mult))) / (sin theta)
-                     b = snd centre - ((pWidth + mult*dRad) * (cos (minAngle**mult))) / (cos theta)
-                     c = fst centre + ((pWidth + mult'*dRad) * (sin (minAngle**mult'))) / (sin theta)
-                     d = snd centre - ((pWidth + mult'*dRad) * (cos (minAngle**mult))) / (cos theta)
-                     num = total / 2
-                     nASV' = nASV - 1
-
-configB :: (Float, Float) -> Float -> Float -> (Float, Float, Float) -> [(Float, Float)]
-configB centre nASV total pathinfo
-            | nASV < 2           = [(a, b)]
-            | nASV > (total/2)   = (a, b) : configB centre nASV' total pathinfo
-            | otherwise          = (c, d) : configB centre nASV' total pathinfo
-               where theta = atan ( snd centre / fst centre)
-                     pWidth = pull1 pathinfo
-                     bRad = (49/pWidth)*(total - 1)**2 / 1000
-                     delta = bRad / pWidth
-                     dRad = (bRad - pWidth)/num
-                     minAngle = calcAngle num delta
-                     mult = total - nASV
-                     mult' = num - nASV
-                     a = fst centre + ((pWidth + mult*dRad) * (sin (minAngle**mult))) * (sin theta)
-                     b = snd centre - ((pWidth + mult*dRad) * (cos (minAngle**mult))) * (cos theta)
-                     c = fst centre + ((pWidth + mult'*dRad) * (sin (minAngle**mult'))) * (sin theta)
-                     d = snd centre - ((pWidth + mult'*dRad) * (cos (minAngle**mult))) * (cos theta)
-                     num = total / 2
-                     nASV' = nASV - 1
-
-configC :: (Float, Float) -> Float -> Float -> (Float, Float, Float) -> [(Float, Float)]
-configC centre nASV total pathinfo
-            | nASV < 2           = [(a, b)]
-            | nASV > (total/2)   = (a, b) : configC centre nASV' total pathinfo
-            | otherwise          = (c, d) : configC centre nASV' total pathinfo
-               where theta = atan ( snd centre / fst centre)
-                     pWidth = pull1 pathinfo
-                     bRad = (49/pWidth)*(total - 1)**2 / 1000
-                     delta = bRad / pWidth
-                     dRad = (bRad - pWidth)/num
-                     minAngle = calcAngle num delta
-                     mult = total - nASV
-                     mult' = num - nASV
-                     a = fst centre - ((pWidth + mult*dRad) * (sin (minAngle**mult))) * (sin theta)
-                     b = snd centre - ((pWidth + mult*dRad) * (cos (minAngle**mult))) * (cos theta)
-                     c = fst centre + ((pWidth + mult'*dRad) * (sin (minAngle**mult'))) * (sin theta)
-                     d = snd centre - ((pWidth + mult'*dRad) * (cos (minAngle**mult))) * (cos theta)
-                     num = total / 2
-                     nASV' = nASV - 1
-
-configD :: (Float, Float) -> Float -> Float -> (Float, Float, Float) -> [(Float, Float)]
-configD centre nASV total pathinfo
-            | nASV < 2           = [(a, b)]
-            | nASV > num         = (a, b) : configD centre nASV' total pathinfo
-            | otherwise          = (c, d) : configD centre nASV' total pathinfo
-               where theta = -90 + atan ( abs (pull3 pathinfo))
-                     alpha = dist2ASV (0.0, 0.0) centre
-                     pWidth = pull1 pathinfo
-                     bRad = (0.000049/pWidth)*((total - 1)**2)
-                     delta = (\x -> if x > 1 then x else 1/x) (bRad / pWidth)
-                     delta' = bRad / pWidth
-                     dRad = (bRad - pWidth)/(num - 1)
-                     minAngle = calcAngle total delta
-                     refAngleCos = (\x -> if x > 0 then 1 else 0) mult * (angleCreep minAngle delta mult)
-                     refAngleSin = (\x -> if x > 0 then 1 else 3.14) mult * (angleCreep minAngle delta mult)
-                     refAngleCos' = (\x -> if x > 0 then 1 else 0) mult' * (angleCreep minAngle delta mult')
-                     refAngleSin' = (\x -> if x > 0 then 1 else 3.14) mult' * (angleCreep minAngle delta mult')
-                     mult = total - nASV
-                     multx = nASV - num
-                     mult' = nASV
-                     a = fst centre + ((bRad -
-                                       (mult*dRad)) *
-                                       (cos refAngleCos) *
-                                       (sin theta))
-                     b = snd centre + ((pWidth +
-                                        (mult*dRad)) *
-                                        (sin refAngleSin) *
-                                        (cos theta))
-                     c = (fst centre - pWidth +
-                                       (mult'*dRad) *
-                                       (cos refAngleCos')) *
-                                       (sin theta)
-                     d = (snd centre - pWidth +
-                                        (mult'*dRad) *
-                                        (sin refAngleSin')) *
-                                        (cos theta)
-                     a' = fst centre + bRad * (cos theta)
-                     b' = snd centre - bRad * (sin theta)
-                     num = total / 2
-                     nASV' = nASV - 1
-
 configDuck :: [((Float, Float), (Float, Float), Float)] ->
                 (Float, Float) ->
                 Float ->
                 [(Float, Float, Float)] ->
                 [[(Float, Float)]]
 configDuck paths start nASV pathInfo
-        | length paths < 2 = [z]
+        | length paths < 2 = [z']
+        | gradY < 0        = j' : configDuck paths' start' nASV pathInfo'
         | otherwise        = z' : configDuck paths' start' nASV pathInfo'
             where paths' = tail paths
                   pathInfo' = tail pathInfo
@@ -502,7 +396,9 @@ configDuck paths start nASV pathInfo
                   gradY = pull3 y
                   num = int2Float $ floorFloatInt (nASV/2)
                   z = reflectConfig start start nASV nASV y
-                  z' = (z !! 2) : (z !! 1) : (z !! 0) : drop 3 z
+                  j = reflectConfig' start start nASV nASV y
+                  j' = octopusSort j
+                  z' = octopusSort z
                   start' = backDoor [start] x
 
 
@@ -516,18 +412,34 @@ reflectConfig centre point nASV total pathinfo
               grad = pull3 pathinfo
               point' = (a, b)
               point'' = (c, d)
-              theta = atan ((grad))
-              phi = 90 - (nASV - num)
-              phi' = 89.5 - nASV
+              theta = 180 + atan((grad))
+              phi = 79 + (nASV - num)
+              phi' = 79 + nASV
               num = int2Float $ ceilingFloatInt (total/2)
-              a = fst point + ((0.05 * cos phi) * sin theta)
-              a' = fst point + (0.05 * cos phi)
-              b = snd point + ((0.05 * sin phi) * cos theta)
-              b' = snd point + (0.05 * sin phi)
-              c = fst point + ((0.05 * cos phi') * sin theta)
-              c' = fst point + (0.05 * cos phi')
-              d = snd point - ((0.05 * sin phi') * cos theta)
-              d' = snd point - (0.05 * sin phi')
+              a = fst point + ((0.05 * sin phi) * cos theta)
+              b = snd point + ((0.05 * cos phi) * sin theta)
+              c = fst point + ((0.05 * sin phi') * cos theta)
+              d = snd point - ((0.05 * cos phi') * sin theta)
+              nASV' = nASV - 1
+
+reflectConfig' :: (Float, Float) -> (Float, Float) -> Float -> Float -> (Float, Float, Float) -> [(Float, Float)]
+reflectConfig' centre point nASV total pathinfo
+    | nASV < 2 = [(c, d)]
+    | nASV > num = (a, b) : reflectConfig centre point' nASV' total pathinfo
+    | nASV > (num - 1) = centre : reflectConfig centre centre nASV' total pathinfo
+    | otherwise  = (c, d) : reflectConfig centre point'' nASV' total pathinfo
+        where pWidth = pull1 pathinfo
+              grad = pull3 pathinfo
+              point' = (a, b)
+              point'' = (c, d)
+              theta = 180 +  atan((grad))
+              phi = 79 + (nASV - num)
+              phi' = 79 + nASV
+              num = int2Float $ ceilingFloatInt (total/2)
+              a = fst point - ((0.05 * sin phi) * cos theta)
+              b = snd point + ((0.05 * cos phi) * sin theta)
+              c = fst point - ((0.05 * sin phi') * cos theta)
+              d = snd point - ((0.05 * cos phi') * sin theta)
               nASV' = nASV - 1
 
 filthWizard :: [(Float, Float)] -> [(Float, Float)] -> [[(Float, Float)]] -> [[(Float, Float)]]
@@ -538,6 +450,12 @@ filthWizard startState endState configs
                 where alpha = head configs
                       z = bestMove' alpha startState
                       configs' = tail configs
+
+octopusSort :: [(Float, Float)] -> [(Float, Float)]
+octopusSort inList = xs ++ xy where xy = drop num inList
+                                    num = ceilingFloatInt (int2Float (length inList) / 2) - 1
+                                    xz = take num inList
+                                    xs = reverse xz
 
 angleCreep :: Float -> Float -> Float -> Float
 angleCreep minAngle delta mult
