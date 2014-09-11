@@ -30,28 +30,31 @@ roadMap :: [(Float, Float)] -> [(Float, Float)] -> [[(Float, Float)]] -> IO ()
 roadMap start goal obstacles = do
                         {-Start by randomly generating an amount of points on the map = 20*number os ASVs-}
                         let seedn = (length start * length obstacles)
-                            points = take (seedn*seedn + 10) $ randomRs (1, 100) (mkStdGen (seedn)) :: [Integer]
-                            points' = map ((/100) . fromInteger) points
-                            points'' = randomPairs points'
-
-                            {-Filter points that would be in the forbidden zone-}
-                            legalPoints = filter (checkCollision obstacles) points''
-
                             nASV = length start
                             limitsX = getBounds nASV
                             start' = findCentre start
                             end' = findCentre goal
                             nASV' = int2Float nASV
+--                            pointsx = take (seedn*seedn + 10) $ randomRs (1, 100) (mkStdGen (seedn)) :: [Integer]
+--                            points' = map ((/100) . fromInteger) pointsx
+--                            points'' = randomPairs points'
+--
+--                            {-Filter points that would be in the forbidden zone-}
+--                            legalPoints = filter (checkCollision obstacles) points''
+                            perths = pathBeast start' [end'] bounds' obstacles
+                            bounds = filter (isLegal) $ foldl (++) [] (map fixBounds obstacles)
+                            bounds' = filter (checkCollision obstacles) bounds
 
-                            configs = configDuck bestPath start' nASV' relevant
+                            configs = configDuck bestPath start' nASV' relevant obstacles
+                            configs' = tail configs
+--
+--                            {-Begin processing paths, first check that the path to a point
+--                             is possible-}
+--                            failBus = paveRoads (start' : legalPoints ++ [end']) (legalPoints ++ [end']) obstacles
+--                            failBus'= group $ sort failBus
+--                            noRepeat = map head failBus'
 
-                            {-Begin processing paths, first check that the path to a point
-                             is possible-}
-                            failBus = paveRoads (start' : legalPoints ++ [end']) (legalPoints ++ [end']) obstacles
-                            failBus'= group $ sort failBus
-                            noRepeat = map head failBus'
-
-                            bestPath = uCS noRepeat [] [start'] end' obstacles
+                            bestPath = uCS perths [] [start'] end' obstacles
                             tCost = sum $ map pull3 bestPath
                             tCostStr = show tCost
                             widthsX = map (plotPathWidths obstacles) bestPath
@@ -61,13 +64,15 @@ roadMap start goal obstacles = do
                             xTraverse = xTravel' start' bestPath
                             relevant = pathDeets widthsX' xTraverse slopeslol
 
-                            theRealDeal = start : filthWizard start goal (configs ++ [goal])
+--                            startx = rotateASV start (head configs)
+                            theRealDeal = start: filthWizard start goal (configs' ++ [goal])
                             theRealDeal' = map formatOut theRealDeal
                             stepCount = length theRealDeal - 1
                             stepCountStr = show stepCount
 
                             fileHead = stepCountStr ++ " " ++ tCostStr
 
+                        mapM_ print configs
                         output <- openFile "out.txt" WriteMode
                         hPutStrLn output fileHead
                         mapM_ (hPutStrLn output) theRealDeal'
@@ -138,16 +143,41 @@ processMap :: String -> [[(Float, Float)]]
 processMap input = map (makeConfig . words) (drop 1 out)
                         where out = stringBreaker (== '\n') input
 
+pathBeast :: (Float, Float) -> [(Float, Float)] -> [(Float, Float)] -> [[(Float, Float)]] -> [((Float, Float), (Float, Float), Float)]
+pathBeast start end bounds obstacles
+                | length bounds' < 2 = [z]
+                | canPath start end obstacles == True = [z]
+                | otherwise                   = z' : (pathBeast start' end' bounds' obstacles) ++ [z'']
+                    where z = makePath' start end obstacles
+                          start' = navigate start bounds obstacles
+                          end' = navigate (head end) bounds obstacles : end
+                          bounds' = filter (/=start') $ filter (/=(head end')) bounds
+                          z' = makePath start start'
+                          z'' = makePath (head end) (head end')
+
+fixBounds :: [(Float, Float)] -> [(Float, Float)]
+fixBounds input
+    | length input < 2 = [z]
+    | length input < 3 = y : fixBounds input'
+    | length input < 4 = x : fixBounds input'
+    | otherwise        = l : fixBounds input'
+            where l = (fst a - 0.01, snd a - 0.01)
+                  x = (fst a + 0.01, snd a - 0.01)
+                  y = (fst a + 0.01, snd a + 0.01)
+                  z = (fst a - 0.01, snd a + 0.01)
+                  a = head input
+                  input' = tail input
+
 isCollision :: (Float, Float) -> [(Float, Float)] -> Bool
 isCollision posXY fZone
             | (( a < x) && ( x < b ) && (c < y) && (y < d)) = True
             | otherwise = False
                 where x = fst posXY
                       y = snd posXY
-                      a = fst (fZone !! 0) - 0.1
-                      b = fst (fZone !! 1) + 0.1
-                      c = snd (fZone !! 1) - 0.1
-                      d = snd (fZone !! 2) + 0.1
+                      a = fst (fZone !! 0) - 0.001
+                      b = fst (fZone !! 1) + 0.001
+                      c = snd (fZone !! 1) - 0.001
+                      d = snd (fZone !! 2) + 0.001
 
 dist2Obstacle :: [[(Float, Float)]] -> (Float, Float)-> [Float]
 dist2Obstacle fZone node
@@ -159,19 +189,19 @@ dist2Obstacle fZone node
 
 getPathwidth :: [[(Float, Float)]] -> (Float, Float) -> (Float, Float) -> Float
 getPathwidth fZone pointA pointB
-                    | length xs == 0 = 0.05
+                    | length xs == 0 = 0.01
                     | otherwise =     minimum xs
                             where xs = map (minimum . dist2Obstacle fZone) lineEq
-                                  xlist = [fst pointA, (fst pointA + 0.01) .. fst pointB]
-                                  ylist = [snd pointA, (snd pointA + 0.01) .. snd pointB]
-                                  grad = (snd pointB - snd pointA)/(fst pointB - fst pointA)
-                                  beta = (snd pointA) - grad*(fst pointA)
-                                  lineEq = [ ((y - beta)/grad, grad*x + beta) | x <- xlist, y <- ylist]
+                                  xlist = [fst x1, (fst x1 + dx) .. fst x2]
+                                  x1 = (\x y -> if fst x > fst y then y else x) pointA pointB
+                                  x2 = (\x y -> if fst x <= fst y then y else x) pointA pointB
+                                  ylist = [snd x1, (snd x1 + dy) .. snd x2]
+                                  dx = (fst x2 - fst x1)/30
+                                  dy = (snd x2 - snd x1)/30
+                                  lineEq = zip xlist ylist
 
 plotPathWidths :: [[(Float, Float)]] -> ((Float,Float), (Float, Float), Float) -> Float
 plotPathWidths fZone path = getPathwidth fZone (pull1 path) (pull2 path)
-
-
 
 checkCollision :: [[(Float, Float)]] -> (Float, Float) -> Bool
 checkCollision obstacles node
@@ -198,16 +228,52 @@ checkPath pointA pointB obstacles
               lineEq = [ ((y - beta)/grad, grad*x + beta) | x <- xlist, y <- ylist]
               canPass = filter (checkCollision obstacles) lineEq
 
+--Boolean check of whether the vector between two points passes through forbidden zone.
+checkPath' :: (Float, Float) -> (Float, Float) -> [[(Float, Float)]] -> Bool
+checkPath' pointA pointB obstacles
+    | (length lineEq) == (length canPass) = True
+    | otherwise = False
+        where xlist = [fst x1, (fst x1 + dx) .. fst x2]
+              x1 = (\x y -> if fst x > fst y then y else x) pointA pointB
+              x2 = (\x y -> if fst x <= fst y then y else x) pointA pointB
+              ylist = [snd x1, (snd x1 + dy) .. snd x2]
+              dx = (fst x2 - fst x1)/30
+              dy = (snd x2 - snd x1)/30
+              lineEq = zip xlist ylist
+              canPass = filter (checkCollision obstacles) lineEq
+
 --Returns the closest node to a specific reference node, from an list of unexplored nodes.
 nodeSniffer :: (Float, Float) -> [(Float, Float)] -> (Float, Float)
 nodeSniffer start points
                    | length points == 1 = head points
-                   | prox1 > prox2 = nodeSniffer start (drop 1 points)
+                   | prox1 > prox2 = nodeSniffer start (tail points)
                    | otherwise  = nodeSniffer start (head points : drop 2 points)
-                        where prox1 = abs(fst start - fst (points !! 0)) +
-                                      abs(snd start - snd (points !! 0))
+                        where prox1 = abs(fst start - fst (head points)) +
+                                      abs(snd start - snd (head points))
                               prox2 = abs(fst start - fst (points !! 1)) +
                                       abs(snd start - snd (points !! 1))
+
+--Returns the closest node to a specific reference node, from an list of unexplored nodes.
+navigate :: (Float, Float) -> [(Float, Float)] -> [[(Float, Float)]] -> (Float, Float)
+navigate start points obstacles
+                   | length points < 2 = head points
+                   | (canReach == False) = navigate start (tail points) obstacles
+                   | (canReach' == True) && (prox1 > prox2) = navigate start (tail points) obstacles
+                   | otherwise  = navigate start (head points : drop 2 points) obstacles
+                        where prox1 = dist2ASV start (head points)
+                              prox2 = dist2ASV start (head $ tail points)
+                              canReach = checkPath' start (head points) obstacles
+                              canReach' = (checkPath' start (head points) obstacles) &&
+                                           (checkPath' start (head $ tail points) obstacles)
+
+isLegal :: (Float, Float) -> Bool
+isLegal vertex
+    | ((x' > 0) && (x < 1) && (y' > 0) && (y < 1)) == True = True
+    | otherwise = False
+        where x = fst vertex + 0.05
+              x' = fst vertex - 0.05
+              y = snd vertex + 0.05
+              y' = snd vertex - 0.05
 
 --Returns the cost of travelling between two nodes.
 getCost :: (Float, Float) -> (Float, Float) -> Float
@@ -218,6 +284,23 @@ makePath :: (Float, Float) -> (Float, Float) -> ((Float, Float), (Float, Float),
 makePath pointA pointB
                 | fst pointA < fst pointB = (pointA, pointB, getCost pointA pointB)
                 | otherwise = (pointB, pointA, getCost pointA pointB)
+
+makePath' :: (Float, Float) -> [(Float, Float)] -> [[(Float, Float)]] -> ((Float, Float), (Float, Float), Float)
+makePath' start endList obs
+            | length endList < 2 = z
+            | x == True          = z
+            | otherwise          = makePath' start endList' obs
+                where x = checkPath start (head endList) obs
+                      z = makePath start (head endList)
+                      endList' = tail endList
+
+canPath :: (Float, Float) -> [(Float, Float)] -> [[(Float, Float)]] -> Bool
+canPath node list obs
+       | x = True
+       | length list < 2  = False
+       | otherwise     = canPath node list' obs
+            where x = checkPath' node (head list) obs
+                  list' = tail list
 
 ---Small expansion on the fst and snd functions to extract element
 --three of a triple.
@@ -316,7 +399,7 @@ bestMove pointA pointB
         | (x' > y') && (x > 0)     = (fst pointB - 0.001, snd pointB)
         | (x' < y') && (y < 0)     = (fst pointB, snd pointB + 0.001)
         | (x' < y') && (y > 0)     = (fst pointB, snd pointB - 0.001)
-        | otherwise            = (fst pointB + 0.001, snd pointB)
+        | otherwise            = (fst pointB + 0.0005, snd pointB + 0.0005)
             where x  = fst pointB - fst pointA
                   y  = snd pointB - snd pointA
                   x' = abs x
@@ -329,6 +412,29 @@ bestMove' pointsA pointsB
                 where z = bestMove (head pointsA) (head pointsB)
                       pointsA' = tail pointsA
                       pointsB' = tail pointsB
+
+bestMoveR :: [(Float, Float)] -> [(Float, Float)] -> (Float, Float) -> Float -> [(Float, Float)]
+bestMoveR pointsA pointsB centre total
+        | lr < 2       = [z]
+        | otherwise    = z : bestMoveR pointsA' pointsB' centre total
+                  where z = bestMoveR' (head pointsA) (head pointsB) centre angle
+                        angle = lr' - total
+                        pointsA' = tail pointsA
+                        pointsB' = tail pointsB
+                        lr = int2Float $ length pointsA
+                        lr' = int2Float $ floorFloatInt (total/2)
+
+bestMoveR' :: (Float, Float) -> (Float, Float) -> (Float, Float) -> Float -> (Float, Float)
+bestMoveR' pointA pointB ref angle
+        | (angle < 0) && (delta1 < 0.005) = (fst pointA - 0.001, snd pointA)
+        | (angle > 0) && (delta2 < 0.005) = (fst pointA + 0.001, snd pointA)
+        | (angle > 0) && (delta3 < 0.005) = (fst pointA, snd pointA - 0.001)
+        | (angle < 0) && (delta4 > 0.005) = (fst pointA, snd pointA + 0.001)
+        | otherwise                       = (fst pointA, snd pointA)
+                where delta1 = abs(abs(angle)*0.05 - (dist2ASV ref (fst pointA - 0.001, snd pointA)))
+                      delta2 = abs(abs(angle)*0.05 - (dist2ASV ref (fst pointA + 0.001, snd pointA)))
+                      delta3 = abs(abs(angle)*0.05 - (dist2ASV ref (fst pointA, snd pointA - 0.001)))
+                      delta4 = abs(abs(angle)*0.05 - (dist2ASV ref (fst pointA, snd pointA + 0.001)))
 
 calcAngle :: Float -> Float -> Float
 calcAngle nASV ratioRad
@@ -384,72 +490,260 @@ configDuck :: [((Float, Float), (Float, Float), Float)] ->
                 (Float, Float) ->
                 Float ->
                 [(Float, Float, Float)] ->
+                [[(Float, Float)]] ->
                 [[(Float, Float)]]
-configDuck paths start nASV pathInfo
-        | length paths < 2 = [z']
-        | gradY < 0        = j' : configDuck paths' start' nASV pathInfo'
-        | otherwise        = z' : configDuck paths' start' nASV pathInfo'
+configDuck paths start nASV pathInfo obs
+        | length paths < 2 = [n']
+        | otherwise        = n' : configDuck paths' start' nASV pathInfo' obs
             where paths' = tail paths
                   pathInfo' = tail pathInfo
                   y = head pathInfo
                   x = head paths
-                  gradY = pull3 y
                   num = int2Float $ floorFloatInt (nASV/2)
-                  z = reflectConfig start start nASV nASV y
-                  j = reflectConfig' start start nASV nASV y
-                  j' = octopusSort j
-                  z' = octopusSort z
+                  n = configBane start start nASV nASV y obs
+                  n' = octopusSort n
                   start' = backDoor [start] x
 
+configBane :: (Float, Float) ->
+              (Float, Float) ->
+              Float ->
+              Float ->
+              (Float, Float, Float) ->
+              [[(Float, Float)]] ->
+              [(Float, Float)]
+configBane centre point nASV total pathInfo obs
+        | (gradY < 0) && (travX < 0)   = n
+        | (gradY > 0) && (travX > 0)   = m
+        | (gradY < 0) && (travX > 0)   = m
+        | (gradY > 0) && (travX < 0)   = n
+        | otherwise                    = m
+                    where gradY = pull3 pathInfo
+                          travX = pull2 pathInfo
+                          z = reflectConfigC centre point nASV total pathInfo
+                          j = reflectConfigA centre point nASV total pathInfo
+                          k = reflectConfigB centre point nASV total pathInfo
+                          l = reflectConfigD centre point nASV total pathInfo
+                          m = reflectConfigZ centre point nASV total pathInfo obs
+                          n = reflectConfigY centre point nASV total pathInfo obs
 
-reflectConfig :: (Float, Float) -> (Float, Float) -> Float -> Float -> (Float, Float, Float) -> [(Float, Float)]
-reflectConfig centre point nASV total pathinfo
+--Negative X-Travel with a negative gradient.
+reflectConfigA :: (Float, Float) -> (Float, Float) -> Float -> Float -> (Float, Float, Float) -> [(Float, Float)]
+reflectConfigA centre point nASV total pathinfo
     | nASV < 2 = [(c, d)]
-    | nASV > num = (a, b) : reflectConfig centre point' nASV' total pathinfo
-    | nASV > (num - 1) = centre : reflectConfig centre centre nASV' total pathinfo
-    | otherwise  = (c, d) : reflectConfig centre point'' nASV' total pathinfo
+    | nASV > num = (a, b) : reflectConfigA centre point' nASV' total pathinfo
+    | nASV > (num - 1) = centre : reflectConfigA centre centre nASV' total pathinfo
+    | otherwise  = (c, d) : reflectConfigA centre point'' nASV' total pathinfo
+        where pWidth = (pull1 pathinfo)
+              grad = pull3 pathinfo
+              point' = (a, b)
+              point'' = (c, d)
+              theta = atan((grad))
+              phi = (nASV - num)
+              phi' = nASV
+              num = int2Float $ ceilingFloatInt (total/2)
+              a = fst point - (0.05 * cos (-phi + theta))
+              b = snd point + (0.05 * sin (-phi + theta))
+              c = fst point + (0.05 * cos (phi' + theta))
+              d = snd point + (0.05 * sin (phi' + theta))
+              nASV' = nASV - 1
+
+--Positive X-Travel and positive gradient
+reflectConfigB :: (Float, Float) -> (Float, Float) -> Float -> Float -> (Float, Float, Float) -> [(Float, Float)]
+reflectConfigB centre point nASV total pathinfo
+    | nASV < 2 = [(c, d)]
+    | nASV > num = (a, b) : reflectConfigB centre point' nASV' total pathinfo
+    | nASV > (num - 1) = centre : reflectConfigB centre centre nASV' total pathinfo
+    | otherwise  = (c, d) : reflectConfigB centre point'' nASV' total pathinfo
         where pWidth = pull1 pathinfo
               grad = pull3 pathinfo
               point' = (a, b)
               point'' = (c, d)
-              theta = 180 + atan((grad))
-              phi = 79 + (nASV - num)
-              phi' = 79 + nASV
+              theta = atan((grad))
+              phi = (nASV - num)
+              phi' = nASV
               num = int2Float $ ceilingFloatInt (total/2)
-              a = fst point + ((0.05 * sin phi) * cos theta)
-              b = snd point + ((0.05 * cos phi) * sin theta)
-              c = fst point + ((0.05 * sin phi') * cos theta)
-              d = snd point - ((0.05 * cos phi') * sin theta)
+              a = fst point + (0.05 * cos (phi + theta))
+              b = snd point + (0.05 * sin (phi + theta))
+              c = fst point - (0.05 * cos (-phi' + theta))
+              d = snd point - (0.05 * sin (-phi' + theta))
               nASV' = nASV - 1
 
-reflectConfig' :: (Float, Float) -> (Float, Float) -> Float -> Float -> (Float, Float, Float) -> [(Float, Float)]
-reflectConfig' centre point nASV total pathinfo
+--Negative X-Travel ,positive gradient.
+reflectConfigC :: (Float, Float) -> (Float, Float) -> Float -> Float -> (Float, Float, Float) -> [(Float, Float)]
+reflectConfigC centre point nASV total pathinfo
     | nASV < 2 = [(c, d)]
-    | nASV > num = (a, b) : reflectConfig centre point' nASV' total pathinfo
-    | nASV > (num - 1) = centre : reflectConfig centre centre nASV' total pathinfo
-    | otherwise  = (c, d) : reflectConfig centre point'' nASV' total pathinfo
+    | nASV > num = (a, b) : reflectConfigC centre point' nASV' total pathinfo
+    | nASV > (num - 1) = centre : reflectConfigC centre centre nASV' total pathinfo
+    | otherwise  = (c, d) : reflectConfigC centre point'' nASV' total pathinfo
         where pWidth = pull1 pathinfo
               grad = pull3 pathinfo
               point' = (a, b)
               point'' = (c, d)
-              theta = 180 +  atan((grad))
-              phi = 79 + (nASV - num)
-              phi' = 79 + nASV
+              theta = atan((grad))
+              phi = (nASV - num)
+              phi' = nASV
               num = int2Float $ ceilingFloatInt (total/2)
-              a = fst point - ((0.05 * sin phi) * cos theta)
-              b = snd point + ((0.05 * cos phi) * sin theta)
-              c = fst point - ((0.05 * sin phi') * cos theta)
-              d = snd point - ((0.05 * cos phi') * sin theta)
+              a = fst point - (0.05 * cos (phi + theta))
+              b = snd point - (0.05 * sin (phi + theta))
+              c = fst point - (0.05 * cos (phi' + theta))
+              d = snd point + (0.05 * sin (phi' + theta))
               nASV' = nASV - 1
+
+--Positive X-travel, negative gradient.
+reflectConfigD :: (Float, Float) -> (Float, Float) -> Float -> Float -> (Float, Float, Float) -> [(Float, Float)]
+reflectConfigD centre point nASV total pathinfo
+    | nASV < 2 = [(c, d)]
+    | nASV > num = (a, b) : reflectConfigD centre point' nASV' total pathinfo
+    | nASV > (num - 1) = centre : reflectConfigD centre centre nASV' total pathinfo
+    | otherwise  = (c, d) : reflectConfigD centre point'' nASV' total pathinfo
+        where pWidth = pull1 pathinfo
+              grad = pull3 pathinfo
+              point' = (a, b)
+              point'' = (c, d)
+              theta = atan((grad))
+              phi = 90 - (total - nASV)
+              phi' = 90 - nASV
+              num = int2Float $ ceilingFloatInt (total/2)
+              a = fst point - (0.05 * cos phi)
+              b = snd point + (0.05 * sin phi)
+              c = fst point + (0.05 * cos phi')
+              d = snd point + (0.05 * sin phi')
+              nASV' = nASV - 1
+
+reflectConfigZ :: (Float, Float) ->
+                  (Float, Float) ->
+                  Float ->
+                  Float ->
+                  (Float, Float, Float) ->
+                  [[(Float, Float)]] ->
+                  [(Float, Float)]
+reflectConfigZ centre point nASV total pathinfo obs
+    | nASV < 2 = [h2]
+    | nASV > num = h1 : reflectConfigZ centre h1 nASV' total pathinfo obs
+    | nASV > (num - 1) = centre : reflectConfigZ centre centre nASV' total pathinfo obs
+    | otherwise  = h2 : reflectConfigZ centre h2 nASV' total pathinfo obs
+        where pWidth = (pull1 pathinfo)*100
+              grad = pull3 pathinfo
+              point' = (a, b)
+              point'' = (c, d)
+              phi = (nASV - num)
+              phi' = nASV
+              num = int2Float $ ceilingFloatInt (total/2)
+              h1 = checkSqualor point' point obs
+              h2 = checkSqualor point'' point obs
+              a = fst point + (0.05 * cos phi)
+              b = snd point + (0.05 * sin phi)
+              c = fst point - (0.05 * cos phi')
+              d = snd point + (0.05 * sin phi')
+              nASV' = nASV - 1
+
+reflectConfigY :: (Float, Float) ->
+                  (Float, Float) ->
+                  Float ->
+                  Float ->
+                  (Float, Float, Float) ->
+                  [[(Float, Float)]] ->
+                  [(Float, Float)]
+reflectConfigY centre point nASV total pathinfo obs
+    | nASV < 2 = [h2]
+    | nASV > num = h1 : reflectConfigY centre h1 nASV' total pathinfo obs
+    | nASV > (num - 1) = centre : reflectConfigY centre centre nASV' total pathinfo obs
+    | otherwise  = h2 : reflectConfigY centre h2 nASV' total pathinfo obs
+        where pWidth = (pull1 pathinfo)
+              grad = pull3 pathinfo
+              point' = (a, b)
+              point'' = (c, d)
+              phi = 90 - (total - nASV)
+              phi' = 90 - nASV
+              num = int2Float $ ceilingFloatInt (total/2)
+              h1 = checkSqualor point' point obs
+              h2 = checkSqualor point'' point obs
+              a = fst point + (0.05 * cos phi)
+              b = snd point + (0.05 * sin phi)
+              c = fst point + (0.05 * cos phi')
+              d = snd point + (0.05 * sin phi')
+              nASV' = nASV - 1
+
+checkConfig :: [(Float, Float)] -> [[(Float, Float)]] -> [(Float, Float)]
+checkConfig input obs
+    | length input < 2 = [z]
+    | otherwise        = z : checkConfig input' obs
+            where z = checkSqualor (head input') (head input) obs
+                  input' = tail input
+
+checkSqualor :: (Float, Float) -> (Float, Float) -> [[(Float, Float)]] -> (Float, Float)
+checkSqualor pointA pointB obstacles
+        | length obstacles < 2 = pointA
+        | z == True            = fixASV pointA pointB n
+        | otherwise            = checkSqualor pointA pointB obstacles'
+            where z = isCollision pointA n
+                  n = head obstacles
+                  obstacles' = tail obstacles
+
+fixASV :: (Float, Float) -> (Float, Float) -> [(Float, Float)] -> (Float, Float)
+fixASV posXY centre fZone
+            | (px == dx) = (a - 0.001, refy + ysign*sqrt (0.0025 - (a - refx - 0.001)**2))
+            | (px == dx') = (b + 0.001, refy + ysign*sqrt (0.0025 - (refx - b + 0.001)**2))
+            | (px == dy) = (refx + xsign*sqrt (0.0025 - (c - refy - 0.001)**2), c - 0.001)
+            | (px == dy') = (refx + xsign*sqrt (0.0025 - (refy - d + 0.001)**2), d + 0.001)
+            | otherwise = posXY
+                where refx = fst centre
+                      refy = snd centre
+                      x = fst posXY
+                      y = snd posXY
+                      xsign = (\x y -> if x - y > 0 then 1 else -1) refx x
+                      ysign = (\x y -> if x - y > 0 then 1 else -1) refy y
+                      a = fst (fZone !! 0) - 0.001
+                      b = fst (fZone !! 1) + 0.001
+                      c = snd (fZone !! 1) - 0.001
+                      d = snd (fZone !! 2) + 0.001
+                      dx = abs (refx - a)
+                      dx' = abs (refx - b)
+                      dy = abs (refy - c)
+                      dy' = abs (refy - d)
+                      spaces = [dx] ++ [dx'] ++ [dy] ++ [dy']
+                      px = minimum spaces
 
 filthWizard :: [(Float, Float)] -> [(Float, Float)] -> [[(Float, Float)]] -> [[(Float, Float)]]
 filthWizard startState endState configs
-        | z == endState = [z]
-        | z == alpha = z : filthWizard z endState configs'
-        | otherwise = z : filthWizard z endState configs
+        | z == endState      = [z]
+        | length configs < 2 = z : filthWizard z endState configs
+--        | z == alpha         = z : filthWizard z endState configs'
+        | x == True         = z : filthWizard z endState configs'
+--        | x == True          = z' ++ filthWizard (last z') endState configs'
+        | otherwise          = z : filthWizard z endState configs
                 where alpha = head configs
                       z = bestMove' alpha startState
                       configs' = tail configs
+                      z' = rotateASV z (head configs')
+                      x = asvContact z alpha
+
+asvContact :: [(Float, Float)] -> [(Float, Float)] -> Bool
+asvContact input target
+    | length input < 2 = False
+    | x == True        = True
+    | otherwise        = asvContact input' target
+        where a = head input
+              x = elem a target
+              input' = tail input
+
+rotateASV :: [(Float, Float)] -> [(Float, Float)] -> [[(Float, Float)]]
+rotateASV start target
+    | abs(delta) < 0.03 = [y]
+    | otherwise    = y : rotateASV y target
+        where dy1 = abs((snd $ head start) - (snd $ last start))
+              dy2 = abs((snd $ head target) - (snd $ last target))
+              dy = dy1 - dy2
+              dx1 =  abs((fst $ head start) - (fst $ last start))
+              dx2 = abs((fst $ head target) - (fst $ last target))
+              dx = dx1 - dx2
+              d1 = dist2ASV (head start) (head target)
+              d2 = dist2ASV (last start) (last target)
+              delta = abs(d1) - abs(d2)
+              delim = (snd $ head target) - (snd $ head start)
+              fx = int2Float $ length start
+              cent = start !! (ceilingFloatInt (fx/2) - 2)
+              y = bestMoveR start target cent fx
 
 octopusSort :: [(Float, Float)] -> [(Float, Float)]
 octopusSort inList = xs ++ xy where xy = drop num inList
