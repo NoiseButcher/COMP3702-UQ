@@ -248,7 +248,26 @@ void move_adversary(Adversary * them, Node *** allNodes, int length, int depth) 
     }
 }
 
-void update_map(char ** trackMap, Adversary ** them, TronCycle * me, Distractor ** evil,
+void stack_players (string *node, char ID) {
+    char tmp;
+    tmp = (*node)[0];
+    if ((*node)[0] > 64 && (*node)[0] < 91) {
+        (*node) = "[";
+        (*node).push_back(tmp);
+        (*node).append("-");
+        (*node).push_back(ID);
+        (*node).append("]");
+    } else if ((*node)[0] == '[') {
+        (*node).substr(0, (*node).size() - 1);
+        (*node).push_back('-');
+        (*node).push_back(ID);
+        (*node).append("]");
+    } else {
+        (*node)[0] = ID;
+    }
+}
+
+void update_map(string **trackMap, Adversary ** them, TronCycle * me, Distractor ** evil,
                                                     int rows, int cols, int ops, int dist) {
     int i, j, k;
 
@@ -264,20 +283,20 @@ void update_map(char ** trackMap, Adversary ** them, TronCycle * me, Distractor 
     for (i = 0; i < rows; i++) {
         for (j = 0; j < cols; j++) {
             //If the old node had a player on it, update poistion.
-            if (trackMap[i][j] < 91 && trackMap[i][j] > 74) {
+            if (trackMap[i][j][0] < 91 && trackMap[i][j][0] > 74) {
                 //Check whether i should be there or not.
                 if (me->posx != j || me->posy != i) {
                     trackMap[i][j] = '0';
-                    trackMap[me->posy][me->posx] = me->ID;
+                    stack_players(&trackMap[me->posy][me->posx], me->ID);
                 }
 
             //Now do Adversaries.
-            } else if (trackMap[i][j] < 75 && trackMap[i][j] > 64) {
+            } else if (trackMap[i][j][0] < 75 && trackMap[i][j][0] > 64) {
                 for (k = 0; k < ops; k++) {
-                    if (trackMap[i][j] == them[k]->ID) {
+                    if (trackMap[i][j][0] == them[k]->ID) {
                         if (them[k]->posx != j || them[k]->posy != i) {
                             trackMap[i][j] = '0';
-                            trackMap[them[k]->posy][them[k]->posx] = them[k]->ID;
+                            stack_players(&trackMap[them[k]->posy][them[k]->posx], them[k]->ID);
                         }
                     }
                 }
@@ -285,17 +304,6 @@ void update_map(char ** trackMap, Adversary ** them, TronCycle * me, Distractor 
         }
     }
 
-}
-
-void display_map (string **trackMap, int rows, int cols) {
-    int i, j;
-
-    for (i = 0; i < rows; i++) {
-        for (j = 0; j < cols; j++) {
-            cout << trackMap[i][j];
-        }
-        cout << endl;
-    }
 }
 
 int single_race_solver(char *tFile, TronCycle **tronPut, int numReg) {
