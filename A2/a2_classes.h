@@ -5,19 +5,20 @@
 #include <fstream>
 #include <unistd.h>
 #include <vector>
+#include <ctime>
 
 using namespace std;
 
 class TronCycle {
     public:
         string name;
+        int price;
         char ID;
-        char MaxSpeed;
         char durability;
         char reliability;
-        string price;
         int posx;
         int posy;
+        int MaxSpeed;
 };
 
 class Track {
@@ -29,40 +30,37 @@ class Track {
         TronCycle * cycles;
 };
 
+class Distractor {
+    public:
+        float p;
+        char ID;
+        int isActive (void) {
+            srand(time(NULL));
+            int x = rand() % 10;
+            if (x <= (p*10)) {return 1; }
+            else {return 0; }
+        }
+};
+
 class Node {
     public:
         int row;
         int col;
-        float visits;
+        int visits;
         float reward;
-        float distractor;
-        char tile;
+        int dist_true;
+        int obs_true;
+        Distractor distractor;
+        string tile;
         int isDist (void) {
-            if (tile > 96) { return 1; }
+            if (dist_true == 1 && (tile.find(distractor.ID) != string::npos)) { return 1; }
             else { return 0; }
         }
         int isOpp (void) {
-            if (tile > 64 && tile < 75) { return 1;}
+            if (tile[0] > 64 && tile[0] < 75) { return 1;}
             else { return 0;}
         }
-        int isObs (void) {
-            if (tile == '1') { return 1;}
-            else { return 0;}
-        }
-        float value (void) { return reward/visits; }
-};
-
-class Distractor {
-    public:
-        float p;
-        int posx;
-        int posy;
-        char ID;
-        int isActive (void) {
-            int x = rand() % 10;
-            if (x <= p) {return 1; }
-            else {return 0; }
-        }
+        float value (void) { return (reward/visits); }
 };
 
 class Adversary {
@@ -84,4 +82,6 @@ class GameTree {
         vector <Node> playable;
         int steps;
         int raceLen;
+        int prize;
+        signed int expenses;
 };

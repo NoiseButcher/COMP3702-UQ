@@ -38,7 +38,17 @@ int main(int argc, char* argv[]) {
     while (j < cCount) {
         cycFile >> trons[j].name;
         cycFile >> buffer;
-        trons[j].MaxSpeed = buffer[0];
+        switch(buffer[0]) {
+            case 'F':
+                trons[j].MaxSpeed = 3;
+                break;
+            case 'M':
+                trons[j].MaxSpeed = 2;
+                break;
+            case'S':
+                trons[j].MaxSpeed = 1;
+                break;
+        };
         cycFile >> buffer;
         trons[j].reliability = buffer[0];
         cycFile >> buffer;
@@ -90,11 +100,11 @@ int main(int argc, char* argv[]) {
     metaTrkFile.close();
 
     //Create threads to run MCTS for the tracks.
-    for (j = 0; j < tCount; j++) {
+    for (j = 0; j < tCount-2; j++) {
         tc = pthread_create(&raceThreads[j], NULL, runRace, (void *)&tracks[j]);
     }
     //Wait for the race threads to terminate before continuing.
-    for (j = 0; j < tCount; j++) {
+    for (j = 0; j < tCount-2; j++) {
         tc = pthread_join(raceThreads[j], NULL);
     }
 
