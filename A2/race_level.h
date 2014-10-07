@@ -7,9 +7,9 @@ this program is the expected reward [prizes - damages] from the completion
 of the track using MCTS to find the most high yield path.
 */
 
-void traverse_cell(TronCycle * me, Node * thisNode, float p) {
+void traverse_cell(TronCycle * me, Node * thisNode) {
 
-    float speed_multiplier = 1 + (thisNode->col) - (me->posx);
+    float speed_multiplier = 1 + ((thisNode->col) - (me->posx))/10;
     //If there is a distractor in the cell, cause some damage
     //based on E[distractor].
     if (thisNode->isDist() && me->reliability == 'N') {
@@ -32,7 +32,7 @@ void traverse_cell(TronCycle * me, Node * thisNode, float p) {
 
     //Otherwise, assume it is a clearway.
     } else {
-        thisNode->reward += 10*p*speed_multiplier;
+        thisNode->reward += 10*speed_multiplier;
         thisNode->visits ++;
     }
 }
@@ -68,30 +68,30 @@ void execute_action(char action, TronCycle * me, Node *** allNodes, int depth, i
         case '3':
             for (i = 1; i < 4; i++) {
                 if (i == impossibleX) break;
-                traverse_cell(me, &(*allNodes)[y][move_to_edge(x+i, length)], 1.0);
+                traverse_cell(me, &(*allNodes)[y][move_to_edge(x+i, length)]);
             }
             break;
         case '2':
             for (i = 1; i < 3; i++) {
                 if (i == impossibleX) break;
-                traverse_cell(me, &(*allNodes)[y][move_to_edge(x+i, length)], 1.0);
+                traverse_cell(me, &(*allNodes)[y][move_to_edge(x+i, length)]);
             }
             break;
         case '1':
             for (i = 1; i < 2; i++) {
                 if (i == impossibleX) break;
-                traverse_cell(me, &(*allNodes)[y][move_to_edge(x+i, length)], 1.0);
+                traverse_cell(me, &(*allNodes)[y][move_to_edge(x+i, length)]);
             }
             break;
         case 'N':
             if (impossibleY == -1 && impossibleX == 1) break;
-            traverse_cell(me, &(*allNodes)[move_to_edge(y-1, depth)][move_to_edge(x+1, length)], 1.0);
+            traverse_cell(me, &(*allNodes)[move_to_edge(y-1, depth)][move_to_edge(x+1, length)]);
             break;
         case 'S':
             if (impossibleY == 1 && impossibleX == 1) break;
-            traverse_cell(me, &(*allNodes)[move_to_edge(y+1, depth)][move_to_edge(x+1, length)], 1.0);
+            traverse_cell(me, &(*allNodes)[move_to_edge(y+1, depth)][move_to_edge(x+1, length)]);
         case '0':
-            traverse_cell(me, &(*allNodes)[y][x], 1.0);
+            traverse_cell(me, &(*allNodes)[y][x]);
             break;
     }
 }
@@ -113,7 +113,7 @@ void select_node(Node *** allNodes, TronCycle * me, GameTree * theRace, int dept
     int j, optx, opty, sMax;
     optx = me->posx;
     opty = me->posy;
-    sMax = (me->posx) + (me->MaxSpeed) + 1;
+    sMax = (me->posx) + (me->MaxSpeed);
     j = (me->posx)+1;
 
     for (i = (me->posy)-1; i < (me->posy)+2; i++) {
@@ -152,6 +152,22 @@ void select_node(Node *** allNodes, TronCycle * me, GameTree * theRace, int dept
         }
     }
 
+    if (opty != me->posy) {
+        srand(time(NULL));
+        int a = rand() % 101;
+        if (a < 70) { opty = opty;
+        } else if (a < 80) {
+            opty = opty;
+            optx = me->posx;
+        } else if (a < 90) {
+            opty = me->posy;
+            optx = optx;
+        } else {
+            opty = me->posy;
+            optx = me->posx;
+        }
+    }
+
     me->posx = optx;
     me->posy = opty;
 
@@ -167,7 +183,7 @@ void select_node_tmp(Node *** allNodes, TronCycle * me, int rows) {
     int j, optx, opty, sMax;
     optx = me->posx;
     opty = me->posy;
-    sMax = (me->posx) + (me->MaxSpeed) + 1;
+    sMax = (me->posx) + (me->MaxSpeed);
     j = (me->posx)+1;
 
     for (i = (me->posy)-1; i < (me->posy)+2; i++) {
@@ -203,20 +219,20 @@ void select_node_tmp(Node *** allNodes, TronCycle * me, int rows) {
     //If I am moving diagonally, maybe don't.
     if (opty != me->posy) {
         srand(time(NULL));
-        int a = rand() % 10;
-        if (a < 8) { opty = opty;
-        } else if (a < 9) {
+        int a = rand() % 101;
+        if (a < 70) { opty = opty;
+        } else if (a < 80) {
             opty = opty;
             optx = me->posx;
-        } else if (a < 10) {
+        } else if (a < 90) {
             opty = me->posy;
             optx = optx;
         } else {
             opty = me->posy;
             optx = me->posx;
         }
-
     }
+
     me->posx = optx;
     me->posy = opty;
 }
@@ -266,11 +282,11 @@ void move_adversary(Adversary * them, Node *** allNodes, int length, int depth) 
     signed int rowT = them->posy;
     int colT = them->posx;
     char default_actions[] = { '3', '2', '1', 'N', 'S', '0', 'T' };
-    j = rand() % 10;
+    j = rand() % 100;
 
     //Determine which action to take based on the random number.
     while (true) {
-      i += (them->adPol[them->posy][them->posx][k])*10;
+      i += (them->adPol[them->posy][them->posx][k])*100;
       if (i >= j) break;
       k++;
       if ( k > 4) k = 0;
@@ -289,7 +305,7 @@ void move_adversary(Adversary * them, Node *** allNodes, int length, int depth) 
             break;
         case 'N':
             them->posx = move_to_edge(colT + 1, length);
-            them->posy = move_to_edge(rowT - 1, 0);
+            them->posy = move_to_edge(rowT - 1, depth);
             break;
         case 'S':
             them->posx = move_to_edge(colT + 1, length);
@@ -298,33 +314,8 @@ void move_adversary(Adversary * them, Node *** allNodes, int length, int depth) 
     }
 }
 
-void stack_players (string *node, char ID) {
-    char tmp;
-    tmp = (*node)[0];
-
-    //Is there already a stack? Add to it.
-    if ((*node)[0] == '[') {
-        (*node).substr(0, (*node).size() - 1);
-        (*node).push_back('-');
-        (*node).push_back(ID);
-        (*node).append("]");
-
-    //Is the node a player/distractor? start a stack.
-    } else if ((*node)[0] > 64) {
-        (*node) = "[";
-        (*node).push_back(tmp);
-        (*node).append("-");
-        (*node).push_back(ID);
-        (*node).append("]");
-
-    //Node is clear, place player on it.
-    } else {
-        (*node)[0] = ID;
-    }
-}
-
-void update_map(Adversary ** them, TronCycle * me, Node *** allNodes,
-                    GameTree * theRace, int rows, int cols, int ops) {
+void update_map(Adversary ** them, TronCycle ** me, Node *** allNodes,
+                    GameTree * theRace, int rows, int cols, int ops, int us) {
     int i, j, k;
 
     //Reset the map.
@@ -351,18 +342,20 @@ void update_map(Adversary ** them, TronCycle * me, Node *** allNodes,
                 }
             }
 
-            //Update player locations.
-            if (me->posx == j && me->posy == i) {
-                stack_players(&(*allNodes)[i][j].tile, me->ID);
-                //If there is a distractor there, bill the fucker.
-                if ((*allNodes)[i][j].isDist()) {
-                    switch(me->reliability) {
-                        case 'R':
-                            theRace->expenses -= 10;
-                            break;
-                        case 'N':
-                            theRace->expenses -= 75;
-                            break;
+            for (k = 0; k < us; k++) {
+                //Update player locations.
+                if (me[k]->posx == j && me[k]->posy == i) {
+                    stack_players(&(*allNodes)[i][j].tile, me[k]->ID);
+                    //If there is a distractor there, bill the fucker.
+                    if ((*allNodes)[i][j].isDist()) {
+                        switch(me[k]->reliability) {
+                            case 'R':
+                                theRace->expenses -= 10;
+                                break;
+                            case 'N':
+                                theRace->expenses -= 75;
+                                break;
+                        }
                     }
                 }
             }
@@ -377,7 +370,7 @@ void update_map(Adversary ** them, TronCycle * me, Node *** allNodes,
     }
 }
 
-int single_race_solver(char *tFile, TronCycle **tronPut, int numReg) {
+int single_race_solver(char *tFile, TronCycle **tronPut, int total) {
 
     GameTree * thisRace;
     Node ** node;
@@ -396,7 +389,6 @@ int single_race_solver(char *tFile, TronCycle **tronPut, int numReg) {
     thisRace = new GameTree;
     thisRace->steps = 0;
     thisRace->expenses = 0;
-    thisRace->expenses -= tronPut[0]->price;
 
     //open the track file -- first argument.
     fstream infile;
@@ -416,7 +408,6 @@ int single_race_solver(char *tFile, TronCycle **tronPut, int numReg) {
     if (ops > 0) {
         adversary = new Adversary[ops];
     }
-    myTeam = numReg;
 
     l = 0;
     k = 0;
@@ -428,18 +419,21 @@ int single_race_solver(char *tFile, TronCycle **tronPut, int numReg) {
             node[i][j].row = i;
             node[i][j].col = j;
             node[i][j].visits = 1;
-            node[i][j].reward = 1;
+            node[i][j].reward = 0;
             node[i][j].dist_true = 0;
             node[i][j].obs_true = 0;
+            node[i][j].distractor.p = 1;
+            node[i][j].distractor.ID = '!';
             node[i][j].tile = buffer[j];
             //Draw a pretty fucking map.
 
             //Register a member of the cycle team at one of the available starting
             //positions if there is a spot available.
-            if (buffer[j] < 91 && buffer[j] > 74 && l < myTeam) {
+            if (buffer[j] < 91 && buffer[j] > 74 && l < total) {
                 tronPut[l]->posx = j;
                 tronPut[l]->posy = i;
                 tronPut[l]->ID = buffer[j];
+                thisRace->expenses -= tronPut[l]->price;
                 l++;
 
             //Register an opponent cycle if they exist, and assume they
@@ -454,7 +448,6 @@ int single_race_solver(char *tFile, TronCycle **tronPut, int numReg) {
             } else if (buffer[j] > 96) {
                 node[i][j].dist_true = 1;
                 node[i][j].distractor.ID = buffer[j];
-                node[i][j].tile = buffer[j];
 
             } else if (buffer[j] == '1') {
                 node[i][j].obs_true = 1;
@@ -462,20 +455,23 @@ int single_race_solver(char *tFile, TronCycle **tronPut, int numReg) {
         }
     }
 
+    myTeam = l;
     i = 0;
+
     //Get Adversary deets.
     if (ops > 0) {
         while (true) {
             infile >> buffer;
             while (i < ops) {
                 if (adversary[i].ID == buffer[0]) {
-                    adversary[i].adPol.reserve(rows);
+                    adversary[i].adPol = new float**[rows];
                     for (j = 0; j < rows ; j++) {
-                        adversary[i].adPol[j].reserve(cols);
+                        adversary[i].adPol[j] = new float*[cols];
                         for (l = 0; l < cols; l++) {
+                            adversary[i].adPol[j][l] = new float[8];
                             for (k = 0; k < 6; k++) {
                                 infile >> buffer;
-                                adversary[i].adPol[j][l].push_back(atof(buffer));
+                                adversary[i].adPol[j][l][k] = (atof(buffer));
                             }
                         }
                     }
@@ -506,6 +502,8 @@ int single_race_solver(char *tFile, TronCycle **tronPut, int numReg) {
         if ( infile.eof() ) break;
     }
 
+    infile.close();
+
     //Store address of the starting node.
     thisRace->raceLen = cols;
     thisRace->playable.push_back(node[tronPut[0]->posy][tronPut[0]->posx]);
@@ -519,22 +517,27 @@ int single_race_solver(char *tFile, TronCycle **tronPut, int numReg) {
     }
     cout << endl;
 
-    int tFlag = 0;
+    int Oflag = 0;
+    int Pflag = 0;
 
+    //Game loop.
     while (true) {
 
-        simulate_game(&dPol, cols, rows, tronPut[0], &node);
+        for (l = 0; l < myTeam; l++) {
+            simulate_game(&dPol, cols, rows, tronPut[l], &node);
 
-        expand_node(tronPut[0], &dPol, &node, cols, rows);
+            expand_node(tronPut[l], &dPol, &node, cols, rows);
 
-        select_node(&node, tronPut[0], thisRace, rows);
+            select_node(&node, tronPut[l], thisRace, rows);
+        }
 
         if (ops > 0) {
             for (i = 0; i < ops; i++) {
                 move_adversary(&adversary[i], &node, cols, rows);
             }
         }
-        update_map(&adversary, tronPut[0], &node, thisRace,  rows, cols, ops);
+
+        update_map(&adversary, tronPut, &node, thisRace,  rows, cols, ops, myTeam);
 
         //Print the map.
         for (i = 0; i < rows; i++) {
@@ -546,29 +549,43 @@ int single_race_solver(char *tFile, TronCycle **tronPut, int numReg) {
         cout << endl;
 
         //If a player has won, break.
-        if (is_terminal(tronPut[0]->posx, cols)) break;
+
+        for (i = 0; i < myTeam; i++) {
+            if (is_terminal(tronPut[i]->posx, cols)) Pflag++;
+        }
+
+        if (Pflag > 0) break;
 
         //If an adversary has won, set the flag and break.
         if (ops > 0) {
             for (i = 0; i < ops; i++) {
-                if (is_terminal(adversary[i].posx, cols)) tFlag++;
+                if (is_terminal(adversary[i].posx, cols)) Oflag++;
             }
         }
 
-        if (tFlag > 0) break;
+        if (Oflag > 0) break;
 
     }
 
-    if (tFlag > 0) {
+    //Determine winner and return the reward.
+    if (Oflag > 0) {
         expected_reward = thisRace->expenses;
-        cout << "LOSER!!!!" << endl;
+        cout << tFile << " LOSER!!!!" << endl;
     } else {
         expected_reward = thisRace->prize + thisRace->expenses;
-        cout << "WINNER!!!!" << endl;
+        cout << tFile << " WINNER!!!!" << endl;
     }
     //Clear the memory I have used.
     for (i = 0; i < rows; i++) {
         delete [] node[i];
+    }
+    for (k = 0; k < ops; k++) {
+        for (i = 0; i < rows; i++) {
+            for (j = 0; j < cols; j++) {
+                delete [] adversary[k].adPol[i][j];
+            }
+            delete [] adversary[k].adPol[i];
+        }
     }
     delete [] node;
     delete [] adversary;

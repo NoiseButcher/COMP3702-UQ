@@ -16,18 +16,27 @@ class TronCycle {
         char ID;
         char durability;
         char reliability;
-        int posx;
-        int posy;
+        signed int posx;
+        signed int posy;
         int MaxSpeed;
+        int has_attr (char a) {
+            if (a == durability) { return 1;
+            } else if (a == reliability) { return 1;
+            } else if (a - 48 <=  MaxSpeed) { return 1;
+            } else return 0;
+        }
 };
 
 class Track {
     public:
         string name;
+        string pQueue;
         int costIn;
         int costOut;
         int numCycles;
         TronCycle * cycles;
+        int dCount;
+        int oCount;
 };
 
 class Distractor {
@@ -36,16 +45,16 @@ class Distractor {
         char ID;
         int isActive (void) {
             srand(time(NULL));
-            int x = rand() % 10;
-            if (x <= (p*10)) {return 1; }
+            int x = rand() % 100;
+            if (x < (p*100)) {return 1; }
             else {return 0; }
         }
 };
 
 class Node {
     public:
-        int row;
-        int col;
+        signed int row;
+        signed int col;
         int visits;
         float reward;
         int dist_true;
@@ -66,9 +75,10 @@ class Node {
 class Adversary {
     public:
         char ID;
-        int posx;
-        int posy;
-        vector < vector < vector <float> > > adPol;
+        signed int posx;
+        signed int posy;
+//        vector < vector < vector <float> > > adPol;
+        float *** adPol;
 };
 
 class Policy {

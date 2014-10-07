@@ -4,7 +4,7 @@
 //race_level.cpp.
 void *runRace (void *arg) {
 
-    int trackVal;
+    int trackVal, x;
     Track *thisTrack;
     thisTrack = (Track *)arg;
     cout << "I am a thread, my target file is " << thisTrack->name << endl;
@@ -17,12 +17,12 @@ int main(int argc, char* argv[]) {
 
     char buffer[1000];
     char subBuffer[1000];
-    int j = 0;
-    int capital, k, tc, tCount, cCount;
+    int capital, i, j, k, tc, tCount, cCount;
+    signed int tRows, tCols;
 
     //Error check cli here.
     if (argc != 3) {
-        //Throw error.
+        cout << "Wrong input moron." << endl;
     }
 
     //Get cycle data.
@@ -34,6 +34,7 @@ int main(int argc, char* argv[]) {
     cCount = atoi(buffer);
     TronCycle trons[cCount];
 
+    j = 0;
     //Populate the array of TronCycles.
     while (j < cCount) {
         cycFile >> trons[j].name;
@@ -81,17 +82,57 @@ int main(int argc, char* argv[]) {
     j = 0;
     //Populate the track list.
     while (true) {
+
         metaTrkFile >> buffer;
         tracks[j].name = buffer;
+        tracks[j].oCount = 0;
+        tracks[j].dCount = 0;
+        tracks[j].numCycles = 0;
         //Process a track file in a seperate buffer.
         trkFile.open(buffer, ios::in);
         //Run this to get to the costs.
-        for (k = 0; k < 4; k ++) { trkFile >> subBuffer;}
+        trkFile >> subBuffer;
+        tRows = atoi(subBuffer);
+        trkFile >> subBuffer;
+        tCols = atoi(subBuffer);
+        trkFile >> subBuffer;
+        trkFile >> subBuffer;
         tracks[j].costIn = atoi(subBuffer);
         trkFile >> subBuffer;
         tracks[j].costOut = atoi(subBuffer);
-        tracks[j].cycles = trons;
-        tracks[j].numCycles = cCount;
+
+        //Use this loop to figure out how many slots are available
+        //for player use, how many obstacles exist and how many
+        //distractors exist.
+        for (i = 0; i < tRows; i++) {
+            trkFile >> subBuffer;
+            for (k = 0; k < tCols; k++) {
+                if (subBuffer[k] == '1') { tracks[j].oCount++;
+                break;
+                }
+            }
+            for (k = 0; k < tCols; k++) {
+                if (subBuffer[k] > 96) { tracks[j].dCount++;
+                break;
+                }
+            }
+            for (k = 0; k < tCols; k++) {
+                if (subBuffer[k] < 91 && subBuffer[k] > 74) { tracks[j].numCycles++;
+                }
+            }
+        }
+
+
+        if ((tRows - tracks[j].oCount < 2) && (tRows - tracks[j].dCount < 2)) {
+            tracks[j].pQueue = "WR3";
+        } else if ((tRows - tracks[j].dCount < 2) && (tracks[j].oCount > 0)) {
+            tracks[j].pQueue = "RW3";
+        } else if ((tracks[j].oCount > tracks[j].dCount) && (tracks[j].oCount > 0))  {
+            tracks[j].pQueue = "3WR";
+        } else {
+            tracks[j].pQueue = "3RW";
+        }
+        sort_Cycles(trons, &tracks[j].cycles, cCount, tracks[j].numCycles, tracks[j].pQueue);
         trkFile.close();
         if (metaTrkFile.eof() ) break;
         j++;
@@ -100,12 +141,14 @@ int main(int argc, char* argv[]) {
     metaTrkFile.close();
 
     //Create threads to run MCTS for the tracks.
-    for (j = 0; j < tCount-2; j++) {
-        tc = pthread_create(&raceThreads[j], NULL, runRace, (void *)&tracks[j]);
+    for (j = 0; j < tCount; j++) {
+        cout << tracks[j].name <<" : " << tracks[j].cycles[0].name << endl;
+        cout << tracks[j].name <<" : " << tracks[j].cycles[1].name << endl;
+//        tc = pthread_create(&raceThreads[j], NULL, runRace, (void *)&tracks[j]);
     }
     //Wait for the race threads to terminate before continuing.
-    for (j = 0; j < tCount-2; j++) {
-        tc = pthread_join(raceThreads[j], NULL);
+    for (j = 0; j < tCount; j++) {
+//        tc = pthread_join(raceThreads[j], NULL);
     }
 
     return 0;
