@@ -18,6 +18,7 @@ class TronCycle {
         char reliability;
         signed int posx;
         signed int posy;
+        int ImaChurch;
         int MaxSpeed;
         int has_attr (char a) {
             if (a == durability) { return 1;
@@ -25,6 +26,13 @@ class TronCycle {
             } else if (a - 48 <=  MaxSpeed) { return 1;
             } else return 0;
         }
+
+};
+
+class Combo {
+    public:
+        int numCycles;
+        TronCycle * cycles;
 };
 
 class Track {
@@ -33,8 +41,9 @@ class Track {
         string pQueue;
         int costIn;
         int costOut;
+        TronCycle ** cycles;
         int numCycles;
-        TronCycle * cycles;
+        int numCombo;
         int dCount;
         int oCount;
 };
@@ -59,6 +68,7 @@ class Node {
         float reward;
         int dist_true;
         int obs_true;
+        int block_true;
         Distractor distractor;
         string tile;
         int isDist (void) {
@@ -77,21 +87,22 @@ class Adversary {
         char ID;
         signed int posx;
         signed int posy;
-//        vector < vector < vector <float> > > adPol;
         float *** adPol;
-};
-
-class Policy {
-    public:
-        char *p_actions;
-        int actions_taken;
 };
 
 class GameTree {
     public:
-        vector <Node> playable;
+        vector <float*> policy;
         int steps;
         int raceLen;
         int prize;
         signed int expenses;
+        int best_child (int a) {
+            int y;
+            int x = 0;
+            for (y = 1; y < 7; y++) {
+                if (policy[a][y] > policy[a][x]) x = y;
+            }
+            return x;
+        }
 };

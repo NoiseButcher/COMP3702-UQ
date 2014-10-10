@@ -7,159 +7,282 @@ this program is the expected reward [prizes - damages] from the completion
 of the track using MCTS to find the most high yield path.
 */
 
-void traverse_cell(TronCycle * me, Node * thisNode) {
-
-    float speed_multiplier = 1 + ((thisNode->col) - (me->posx))/10;
+float traverse_cell(TronCycle * me, Node * thisNode, float p) {
     //If there is a distractor in the cell, cause some damage
     //based on E[distractor].
     if (thisNode->isDist() && me->reliability == 'N') {
-        thisNode->reward -= 75;
+//        thisNode->reward -= 75;
+        thisNode->reward += 0.1*p;
         thisNode->visits++;
 
     } else if (thisNode->isDist() && me->reliability == 'R') {
-        thisNode->reward -= 10;
+//        thisNode->reward -= 10;
+        thisNode->reward += 0.5*p;
         thisNode->visits++;
 
     //If there is an obstacle in the cell, cause some more damage.
     } else if (thisNode->obs_true && me->durability == 'W') {
-        thisNode->reward -= 5;
+//        thisNode->reward -= 5;
+        thisNode->reward += 0.8*p;
         thisNode ->visits++;
 
     //Note that this cell will have 0 visits for  domestic cycles,
     //so will almost certainly be removed from the tree during pruning.
     }  else if (thisNode->obs_true && me->durability == 'D') {
-        thisNode->reward -= 50;
+//        thisNode->reward -= 50;
+        thisNode ->visits++;
 
     //Otherwise, assume it is a clearway.
     } else {
-        thisNode->reward += 10*speed_multiplier;
+        thisNode->reward += 5*p;
         thisNode->visits ++;
     }
+
+    return thisNode->value();
 }
 
-void execute_action(char action, TronCycle * me, Node *** allNodes, int depth, int length) {
-
-    int impossibleX = 0;
-    signed int impossibleY = 0;
+float execute_action(int action, TronCycle * me, Node *** allNodes, int depth, int length) {
+    float z = 0;
     int x = me->posx;
     int y = me->posy;
-    int i;
-
-    //Use this to make sure we don't travel through nodes that we cannot.
-    if (me->durability == 'D') {
-        if ((*allNodes)[y][move_to_edge(x+1, length)].obs_true) { impossibleX = 1;
-        }
-        else if ((*allNodes)[y][move_to_edge(x+2, length)].obs_true) { impossibleX = 2;
-        }
-        else if ((*allNodes)[y][move_to_edge(x+3, length)].obs_true) { impossibleX = 3;
-        }
-
-        if ((*allNodes)[move_to_edge(y-1, depth)][move_to_edge(x+1, length)].obs_true) { impossibleY = -1; impossibleX = 1;
-        }
-        if ((*allNodes)[move_to_edge(y+1, depth)][move_to_edge(x+1, length)].obs_true) { impossibleY = 1; impossibleX = 1;
-        }
-        if ((*allNodes)[move_to_edge(y-1, depth)][x].obs_true) { impossibleY = -1;
-        }
-        if ((*allNodes)[move_to_edge(y+1, depth)][x].obs_true) { impossibleY = 1;
-        }
-    }
 
     switch(action) {
-        case '3':
-            for (i = 1; i < 4; i++) {
-                if (i == impossibleX) break;
-                traverse_cell(me, &(*allNodes)[y][move_to_edge(x+i, length)]);
+        case 0:
+            if ((*allNodes)[y][move_to_edge(x+3, length)].obs_true) { break;
+            } else { z = traverse_cell(me, &(*allNodes)[y][move_to_edge(x+3, length)], 1.0);
             }
             break;
-        case '2':
-            for (i = 1; i < 3; i++) {
-                if (i == impossibleX) break;
-                traverse_cell(me, &(*allNodes)[y][move_to_edge(x+i, length)]);
+        case 1:
+            if ((*allNodes)[y][move_to_edge(x+2, length)].obs_true) { break;
+            } else { z = traverse_cell(me, &(*allNodes)[y][move_to_edge(x+2, length)], 1.0);
             }
             break;
-        case '1':
-            for (i = 1; i < 2; i++) {
-                if (i == impossibleX) break;
-                traverse_cell(me, &(*allNodes)[y][move_to_edge(x+i, length)]);
+        case 2:
+            if ((*allNodes)[y][move_to_edge(x+1, length)].obs_true) { break;
+            } else { z = traverse_cell(me, &(*allNodes)[y][move_to_edge(x+1, length)], 1.0);
             }
             break;
-        case 'N':
-            if (impossibleY == -1 && impossibleX == 1) break;
-            traverse_cell(me, &(*allNodes)[move_to_edge(y-1, depth)][move_to_edge(x+1, length)]);
+        case 3:
+            if ((*allNodes)[move_to_edge(y-1, depth)][move_to_edge(x+1, length)].obs_true) { break;
+            } else { z = traverse_cell(me, &(*allNodes)[move_to_edge(y-1, depth)][move_to_edge(x+1, length)], 1.0);
+            }
             break;
-        case 'S':
-            if (impossibleY == 1 && impossibleX == 1) break;
-            traverse_cell(me, &(*allNodes)[move_to_edge(y+1, depth)][move_to_edge(x+1, length)]);
-        case '0':
-            traverse_cell(me, &(*allNodes)[y][x]);
+        case 4:
+            if ((*allNodes)[move_to_edge(y+1, depth)][move_to_edge(x+1, length)].obs_true) { break;
+            } else { z = traverse_cell(me, &(*allNodes)[move_to_edge(y+1, depth)][move_to_edge(x+1, length)], 1.0);
+            }
+            break;
+        case 5:
+            z = traverse_cell(me, &(*allNodes)[y][x], 0.5);
+            if (me->ImaChurch == 1) {
+                (*allNodes)[y][x].block_true = me->ImaChurch;
+            }
+            break;
+        case 6:
+            z = traverse_cell(me, &(*allNodes)[y][x], 0.5);
+            if ((*allNodes)[y][x].tile[0] != '1') (*allNodes)[y][x].block_true = me->ImaChurch;
             break;
     }
+    return z;
 }
 
-void expand_node(TronCycle * me, Policy * pi, Node *** allNodes, int len, int depth) {
-    char current_action;
-    int action = (pi->actions_taken)-(me->MaxSpeed);
-    while(action < 5) {
-        current_action = pi->p_actions[action];
-        execute_action(current_action, me, allNodes, depth, len);
-        action++;
-        if (action > 5) break;
+void expand_node(TronCycle * me, float * policy, Node *** allNodes, int len, int depth) {
+    int i, action;
+    if (me->ImaChurch == 1) {
+        action = 5;
+    } else {
+        action = 3-(me->MaxSpeed);
+    }
+
+    for (i = action; i < 7; i++) {
+        policy[i] += execute_action(i, me, allNodes, depth, len);
     }
 }
 
 //Chooses a local node to add to the tree based purely on value.
-void select_node(Node *** allNodes, TronCycle * me, GameTree * theRace, int depth) {
+void select_node(Node *** allNodes, TronCycle * me, GameTree * theRace, int depth, int length) {
     signed int i;
-    int j, optx, opty, sMax;
+    int k;
+    int optx, opty;
     optx = me->posx;
     opty = me->posy;
-    sMax = (me->posx) + (me->MaxSpeed);
-    j = (me->posx)+1;
 
-    for (i = (me->posy)-1; i < (me->posy)+2; i++) {
+    k = theRace->best_child(theRace->steps);
 
-        if ((i >= 0) && (i < depth)) {
-            if ((*allNodes)[i][j].value() > (*allNodes)[opty][optx].value()
-                && !node_in_Tree((*allNodes)[i][j], theRace->playable)) {
-                optx = j;
-                opty = i;
-            }
-        }
+    if (k < (3 - me->MaxSpeed)) {
+        k = (3 - me->MaxSpeed);
     }
-    if (me->MaxSpeed > 1) {
-        i = me->posy;
-        for(j = (me->posx)+2; j < sMax; j++) {
-            //Check if the node has greater value, and if it does not already exist
-            //in the game tree.
-            if ((*allNodes)[i][j].value() > (*allNodes)[opty][optx].value()
-                && !node_in_Tree((*allNodes)[i][j], theRace->playable)) {
-                optx = j;
-                opty = i;
+
+    if (me->ImaChurch == 1 && k < 5) {
+        k = 5;
+    }
+
+    //Determine which action I am taking and execute it.
+    switch(k) {
+        //FF
+        case 0:
+            optx = move_to_edge(optx+=3, length);
+            break;
+        //FM
+        case 1:
+            optx = move_to_edge(optx+=2, length);
+            break;
+        //FS
+        case 2:
+            optx = move_to_edge(optx+=1, length);
+            break;
+        //NE
+        case 3:
+            optx = move_to_edge(optx+=1, length);
+            opty = move_to_edge(opty-=1, depth);
+            break;
+        //SE
+        case 4:
+            optx = move_to_edge(optx+=1, length);
+            opty = move_to_edge(opty+=1, depth);
+            break;
+        //ST
+        case 5:
+            break;
+        //T
+        case 6:
+            if (me->ImaChurch == 0) {
+                srand(time(NULL)*optx*opty);
+                int a = rand() % 100;
+                if (a < 71) {
+                    me->ImaChurch = 1;
+                }
+                else {
+                    me->ImaChurch = 0;
+                }
             }
-        }
+            break;
     }
 
     //If i am a pissweak bike, stop before the obstacles. Or if i cross
-    //several on a mighty one, deduct some dollars.
+    //several on a mighty one, deduct some dollars. This includes hitting my buddies.
     for (i = me->posx+1; i < optx; i++) {
-        if ((*allNodes)[opty][i].obs_true && me->durability=='D') {
+        if (((*allNodes)[opty][i].obs_true || ((*allNodes)[opty][i].block_true && me->ImaChurch == 0)) && me->durability=='D') {
             optx = i-1;
             opty = me->posy;
             theRace->expenses -= 50;
             break;
-        } else if ((*allNodes)[opty][i].obs_true && me->durability=='W') {
+        } else if (((*allNodes)[opty][i].obs_true || ((*allNodes)[opty][i].block_true && me->ImaChurch == 0))
+                && me->durability=='W') {
+            theRace->expenses -= 5;
+        }
+    }
+
+    theRace->steps++;
+
+    if (opty != me->posy) {
+        srand(time(NULL)*theRace->steps*opty);
+        int a = rand() % 101;
+        if (a < 70) { opty = opty;
+        } else if (a < 80 && a > 70) {
+            opty = opty;
+            optx = me->posx;
+        } else if (a > 80 && a < 90) {
+            opty = me->posy;
+            optx = optx;
+        } else {
+            opty = me->posy;
+            optx = me->posx;
+        }
+    }
+
+    me->posx = optx;
+    me->posy = opty;
+}
+
+//Chooses an action at random.
+void select_node_X(Node *** allNodes, TronCycle * me, GameTree * theRace, int depth, int length) {
+    int i;
+    int optx, opty, a, k;
+    optx = me->posx;
+    opty = me->posy;
+
+    srand(time(NULL)*theRace->steps*7.2);
+    a = rand() % 7*(theRace->steps+1)*1.5;
+    k = 0;
+
+    i = 0;
+
+    while(true) {
+        i += theRace->policy[theRace->steps][k];
+        if (i > a) break;
+        k++;
+        if (k > 6) k = 0;
+    }
+
+    if (k < (3 - me->MaxSpeed)) {
+        k = (3 - me->MaxSpeed);
+    }
+
+
+    //Determine which action I am taking and execute it.
+    switch(k) {
+        //FF
+        case 0:
+            optx = move_to_edge(optx+=3, length);
+            break;
+        //FM
+        case 1:
+            optx = move_to_edge(optx+=2, length);
+            break;
+        //FS
+        case 2:
+            optx = move_to_edge(optx+=1, length);
+            break;
+        //NE
+        case 3:
+            optx = move_to_edge(optx+=1, length);
+            opty = move_to_edge(opty-=1, depth);
+            break;
+        //SE
+        case 4:
+            optx = move_to_edge(optx+=1, length);
+            opty = move_to_edge(opty+=1, depth);
+            break;
+        //ST
+        case 5:
+            break;
+        //T
+        case 6:
+            if (me->ImaChurch == 0) {
+                srand(time(NULL)*optx*opty);
+                int a = rand() % 100;
+                if (a < 71) {
+                    me->ImaChurch = 1;
+                    }
+            } else {
+                me->ImaChurch = 0;
+            }
+            break;
+    }
+
+    //If i am a pissweak bike, stop before the obstacles. Or if i cross
+    //several on a mighty one, deduct some dollars. This includes hitting my buddies.
+    for (i = me->posx+1; i < optx; i++) {
+        if ((((*allNodes)[opty][i].obs_true || ((*allNodes)[opty][i].block_true) && me->ImaChurch == 0)) && me->durability=='D') {
+            optx = i-1;
+            opty = me->posy;
+            theRace->expenses -= 50;
+            break;
+        } else if (((*allNodes)[opty][i].obs_true || ((*allNodes)[opty][i].block_true) && me->ImaChurch == 0)
+                && me->durability=='W') {
             theRace->expenses -= 5;
         }
     }
 
     if (opty != me->posy) {
-        srand(time(NULL));
-        int a = rand() % 101;
+        srand(time(NULL)*theRace->steps*optx);
+        a = rand() % 101;
         if (a < 70) { opty = opty;
-        } else if (a < 80) {
+        } else if (a < 80 && a > 70) {
             opty = opty;
             optx = me->posx;
-        } else if (a < 90) {
+        } else if (a > 80 && a < 90) {
             opty = me->posy;
             optx = optx;
         } else {
@@ -171,151 +294,183 @@ void select_node(Node *** allNodes, TronCycle * me, GameTree * theRace, int dept
     me->posx = optx;
     me->posy = opty;
 
-    //Store the address of the best child node into the next element of
-    //the game tree.
-    theRace->playable.push_back((*allNodes)[opty][optx]);
     theRace->steps++;
-}
-
-//Does the same as the above funtion without adding the node to the game tree.
-void select_node_tmp(Node *** allNodes, TronCycle * me, int rows) {
-    signed int i;
-    int j, optx, opty, sMax;
-    optx = me->posx;
-    opty = me->posy;
-    sMax = (me->posx) + (me->MaxSpeed);
-    j = (me->posx)+1;
-
-    for (i = (me->posy)-1; i < (me->posy)+2; i++) {
-
-        if ((i >= 0) && (i < rows)) {
-            if ((*allNodes)[i][j].value() > (*allNodes)[opty][optx].value()) {
-                optx = j;
-                opty = i;
-            }
-        }
-    }
-    if (me->MaxSpeed > 1) {
-        i = me->posy;
-        for(j = (me->posx)+2; j < sMax; j++) {
-            //Check if the node has greater value, and if it does not already exist
-            //in the game tree.
-            if ((*allNodes)[i][j].value() > (*allNodes)[opty][optx].value()) {
-                optx = j;
-                opty = i;
-            }
-        }
-    }
-    //If i am a pissweak bike, stop before the obstacles. Or if i cross
-    //several on a mighty one, deduct some dollars.
-    for (i = me->posx; i < optx; i++) {
-        if ((*allNodes)[opty][i].obs_true && me->durability=='D') {
-            optx = i-1;
-            opty = me->posy;
-            break;
-        }
-    }
-
-    //If I am moving diagonally, maybe don't.
-    if (opty != me->posy) {
-        srand(time(NULL));
-        int a = rand() % 101;
-        if (a < 70) { opty = opty;
-        } else if (a < 80) {
-            opty = opty;
-            optx = me->posx;
-        } else if (a < 90) {
-            opty = me->posy;
-            optx = optx;
-        } else {
-            opty = me->posy;
-            optx = me->posx;
-        }
-    }
-
-    me->posx = optx;
-    me->posy = opty;
 }
 
 //Runs the simulation for a game with a temporary TronCycle and Policy until
 //a terminal state is reached, then deletes the temporary things.
-void simulate_game(Policy * defaultPol, int length, int depth, TronCycle * me, Node *** allNodes) {
+void simulate_game(GameTree * theTruth, int length, int depth, TronCycle * me, Node *** allNodes, int ops,
+    Adversary ** opponents) {
 
-    int valX, valY;
+    int valX, simSteps, i, j, maxSteps;
+    float default_weights[] = {1, 1, 1, 1, 1, 1, 1};
+    if (ops == 0) {
+        default_weights[5] = 0;
+        default_weights[6] = 0;
+    }
     valX = me->posx;
-    valY = me->posy;
 
-    Policy *thisSim;
+    int DoomFlag = 0;
+
+    GameTree * simTree;
     TronCycle *autoPilot;
+    Adversary **chariots;
 
+    simTree = new GameTree;
+    simTree->policy.push_back(default_weights);
+    simTree->steps = 0;
+    simTree->prize = theTruth->prize;
     autoPilot = new TronCycle;
-    thisSim = new Policy;
+    chariots = new Adversary*[ops];
+    for (i = 0; i < ops; i++) {
+        chariots[i] = new Adversary;
+        chariots[i]->adPol = opponents[i]->adPol;
+        chariots[i]->posx = opponents[i]->posx;
+        chariots[i]->posy = opponents[i]->posy;
+    }
     autoPilot->durability = me->durability;
     autoPilot->posx = me->posx;
     autoPilot->posy = me->posy;
     autoPilot->MaxSpeed = me->MaxSpeed;
     autoPilot->reliability = me->reliability;
+    autoPilot->ImaChurch = me->ImaChurch;
 
+    //Run solo simulations until a hard limit is reached OR
+    //enough wins have been achieved.
+    while (true) {
 
-    //Run solo simulations until a terminal state is reached.
-    while (is_terminal(valX, length) == 0) {
-
-        thisSim->p_actions = defaultPol->p_actions;
-        thisSim->actions_taken = defaultPol->actions_taken;
-        expand_node(autoPilot, thisSim, allNodes, length, depth);
-        select_node_tmp(allNodes, autoPilot, depth);
+        simTree->policy.push_back(default_weights);
+        expand_node(autoPilot, simTree->policy[simTree->steps], allNodes, length, depth);
+        select_node_X(allNodes, autoPilot, simTree, depth, length);
         valX = autoPilot->posx;
-        valY = autoPilot->posy;
-        if (is_terminal(valX, length) == 1) break;
+        //If I win this simulation, backtrack, and boost reward for actions.
+        if (is_terminal(valX, length)) {
+            update_gametree_sim(simTree, 8);
+            autoPilot->posx = me->posx;
+            autoPilot->posy = me->posy;
+            autoPilot->ImaChurch = me->ImaChurch;
+            valX = autoPilot->posx;
+            for (i = 0; i < ops; i++) {
+                chariots[i]->posx = opponents[i]->posx;
+                chariots[i]->posy = opponents[i]->posy;
+            }
+            for (i = 0; i < depth; i++) {
+                for (j = 0; j < length; j++) {
+                    (*allNodes)[i][j].block_true = 0;
+                    (*allNodes)[i][j].reward = 0;
+                    (*allNodes)[i][j].visits = 1;
+                }
+            }
+            break;
+        }
 
+        for (i = 0; i < ops; i++) {
+            move_adversary(chariots[i], allNodes, length, depth);
+            if (is_terminal(chariots[i]->posx, length)) DoomFlag = 1;
+        }
+        if (simTree->steps > length*2) DoomFlag++;
+        //If the opponents win, backtrack and reset the map.
+        if (DoomFlag > 0) {
+            update_gametree_sim(simTree, 0);
+            autoPilot->posx = me->posx;
+            autoPilot->posy = me->posy;
+            autoPilot->ImaChurch = me->ImaChurch;
+            valX = autoPilot->posx;
+            autoPilot->ImaChurch = me->ImaChurch;
+            for (i = 0; i < ops; i++) {
+                chariots[i]->posx = opponents[i]->posx;
+                chariots[i]->posy = opponents[i]->posy;
+            }
+            for (i = 0; i < depth; i++) {
+                for (j = 0; j < length; j++) {
+                    (*allNodes)[i][j].block_true = 0;
+                    (*allNodes)[i][j].reward = 0;
+                    (*allNodes)[i][j].visits = 1;
+                }
+            }
+            break;
+        }
     }
 
-    delete thisSim;
+    maxSteps = simTree->steps;
+    simTree->steps = 0;
+    DoomFlag = 0;
+    simSteps = 0;
+
+    while (simSteps < 20*length) {
+
+        expand_node(autoPilot, simTree->policy[simTree->steps], allNodes, length, depth);
+        select_node_X(allNodes, autoPilot, simTree, depth, length);
+        if (simTree->steps >= maxSteps) {
+            simTree->policy.push_back(default_weights);
+            maxSteps++;
+        }
+        valX = autoPilot->posx;
+        //If I win this simulation, backtrack, and boost reward for actions.
+        if (is_terminal(valX, length)) {
+            update_gametree_sim(simTree, 8);
+            simSteps++;
+            simTree->steps = 0;
+            autoPilot->posx = me->posx;
+            autoPilot->posy = me->posy;
+            autoPilot->ImaChurch = me->ImaChurch;
+            valX = autoPilot->posx;
+            autoPilot->ImaChurch = me->ImaChurch;
+            for (i = 0; i < ops; i++) {
+                chariots[i]->posx = opponents[i]->posx;
+                chariots[i]->posy = opponents[i]->posy;
+            }
+            for (i = 0; i < depth; i++) {
+                for (j = 0; j < length; j++) {
+                    (*allNodes)[i][j].block_true = 0;
+                    (*allNodes)[i][j].reward = 0;
+                    (*allNodes)[i][j].visits = 1;
+                }
+            }
+        }
+
+        for (i = 0; i < ops; i++) {
+            move_adversary(chariots[i], allNodes, length, depth);
+            if (is_terminal(chariots[i]->posx, length)) DoomFlag = 1;
+        }
+        if (simTree->steps > length*2) DoomFlag++;
+        //If the opponents win, backtrack and reset the map.
+        if (DoomFlag > 0) {
+            DoomFlag = 0;
+            update_gametree_sim(simTree, 0);
+            simSteps++;
+            simTree->steps = 0;
+            autoPilot->posx = me->posx;
+            autoPilot->posy = me->posy;
+            autoPilot->ImaChurch = me->ImaChurch;
+            valX = autoPilot->posx;
+            autoPilot->ImaChurch = me->ImaChurch;
+            for (i = 0; i < ops; i++) {
+                chariots[i]->posx = opponents[i]->posx;
+                chariots[i]->posy = opponents[i]->posy;
+            }
+            for (i = 0; i < depth; i++) {
+                for (j = 0; j < length; j++) {
+                    (*allNodes)[i][j].block_true = 0;
+                    (*allNodes)[i][j].reward = 0;
+                    (*allNodes)[i][j].visits = 1;
+                }
+            }
+        }
+    }
+
+    update_gametree(theTruth, simTree);
+
+    for (i = 0; i < ops; i++) {
+        delete chariots[i];
+    }
+    delete [] chariots;
+    delete simTree;
     delete autoPilot;
 }
 
-//Use a random number generator to choose the action of an adversary.
-void move_adversary(Adversary * them, Node *** allNodes, int length, int depth) {
-    int i, j, k;
-    k = 0;
-    i = 0;
-    signed int rowT = them->posy;
-    int colT = them->posx;
-    char default_actions[] = { '3', '2', '1', 'N', 'S', '0', 'T' };
-    j = rand() % 100;
-
-    //Determine which action to take based on the random number.
-    while (true) {
-      i += (them->adPol[them->posy][them->posx][k])*100;
-      if (i >= j) break;
-      k++;
-      if ( k > 4) k = 0;
-    }
-
-    //Take the action and update the position of the adversary's cycle.
-    switch(default_actions[k]) {
-        case '3':
-            them->posx = move_to_edge(colT + 3, length);
-            break;
-        case '2':
-            them->posx = move_to_edge(colT + 2, length);
-            break;
-        case '1':
-            them->posx = move_to_edge(colT + 1, length);
-            break;
-        case 'N':
-            them->posx = move_to_edge(colT + 1, length);
-            them->posy = move_to_edge(rowT - 1, depth);
-            break;
-        case 'S':
-            them->posx = move_to_edge(colT + 1, length);
-            them->posy = move_to_edge(rowT + 1, depth);
-            break;
-    }
-}
-
 void update_map(Adversary ** them, TronCycle ** me, Node *** allNodes,
-                    GameTree * theRace, int rows, int cols, int ops, int us) {
+                    GameTree ** theRace, int rows, int cols, int ops, int us) {
     int i, j, k;
 
     //Reset the map.
@@ -350,10 +505,10 @@ void update_map(Adversary ** them, TronCycle ** me, Node *** allNodes,
                     if ((*allNodes)[i][j].isDist()) {
                         switch(me[k]->reliability) {
                             case 'R':
-                                theRace->expenses -= 10;
+                                theRace[k]->expenses -= 10;
                                 break;
                             case 'N':
-                                theRace->expenses -= 75;
+                                theRace[k]->expenses -= 75;
                                 break;
                         }
                     }
@@ -372,23 +527,26 @@ void update_map(Adversary ** them, TronCycle ** me, Node *** allNodes,
 
 int single_race_solver(char *tFile, TronCycle **tronPut, int total) {
 
-    GameTree * thisRace;
+    GameTree ** thisRace;
     Node ** node;
     Adversary * adversary;
-    Policy dPol;
     char buffer[1000];
-    char default_actions[] = { '3', '2', '1', 'N', 'S', '0', 'T' };
-    dPol.p_actions = default_actions;
-    dPol.actions_taken = 3;
-    int rows, cols, ops, myTeam, i, j, k, l;
+    int rows, cols, ops, i, j, k, l;
+    float default_weights[] = {1, 1, 1, 1, 1, 1, 1};
 
     //This is the value that is returned at completion of
     //execution.
     signed int expected_reward = 0;
 
-    thisRace = new GameTree;
-    thisRace->steps = 0;
-    thisRace->expenses = 0;
+    //Construct a new game tree for each human player, start with no
+    //expenses, steps at zero and a balanced policy for the first move.
+    thisRace = new GameTree*[total];
+    for (l = 0; l < total; l++) {
+        thisRace[l] = new GameTree;
+        thisRace[l]->steps = 0;
+        thisRace[l]->expenses = 0;
+        thisRace[l]->policy.push_back(default_weights);
+    }
 
     //open the track file -- first argument.
     fstream infile;
@@ -400,8 +558,19 @@ int single_race_solver(char *tFile, TronCycle **tronPut, int total) {
     infile >> buffer;
     ops = atoi(buffer);
     infile >> buffer;
+    for (l = 0; l < total; l++) {
+        thisRace[l]->expenses -= atoi(buffer);
+    }
     infile >> buffer;
-    thisRace->prize = atoi(buffer);
+    for (l = 0; l < total; l++) {
+        thisRace[l]->prize = atoi(buffer);
+        thisRace[l]->raceLen = cols;
+    }
+
+    if (ops == 0) {
+        default_weights[5] = 0;
+        default_weights[6] = 0;
+    }
 
     //Init the map as a matrix of node structs.
     node = new Node*[rows];
@@ -422,10 +591,10 @@ int single_race_solver(char *tFile, TronCycle **tronPut, int total) {
             node[i][j].reward = 0;
             node[i][j].dist_true = 0;
             node[i][j].obs_true = 0;
+            node[i][j].block_true = 0;
             node[i][j].distractor.p = 1;
             node[i][j].distractor.ID = '!';
             node[i][j].tile = buffer[j];
-            //Draw a pretty fucking map.
 
             //Register a member of the cycle team at one of the available starting
             //positions if there is a spot available.
@@ -433,7 +602,7 @@ int single_race_solver(char *tFile, TronCycle **tronPut, int total) {
                 tronPut[l]->posx = j;
                 tronPut[l]->posy = i;
                 tronPut[l]->ID = buffer[j];
-                thisRace->expenses -= tronPut[l]->price;
+//                thisRace[l]->expenses -= tronPut[l]->price;
                 l++;
 
             //Register an opponent cycle if they exist, and assume they
@@ -455,7 +624,6 @@ int single_race_solver(char *tFile, TronCycle **tronPut, int total) {
         }
     }
 
-    myTeam = l;
     i = 0;
 
     //Get Adversary deets.
@@ -504,18 +672,14 @@ int single_race_solver(char *tFile, TronCycle **tronPut, int total) {
 
     infile.close();
 
-    //Store address of the starting node.
-    thisRace->raceLen = cols;
-    thisRace->playable.push_back(node[tronPut[0]->posy][tronPut[0]->posx]);
-
-    //Print the inital state of the map.
-    for (i = 0; i < rows; i++) {
-        for (j = 0; j < cols; j++) {
-            cout << node[i][j].tile;
-        }
-        cout << endl;
-    }
-    cout << endl;
+//    Print the inital state of the map.
+//    for (i = 0; i < rows; i++) {
+//        for (j = 0; j < cols; j++) {
+//            cout << node[i][j].tile;
+//        }
+//        cout << endl;
+//    }
+//    cout << endl;
 
     int Oflag = 0;
     int Pflag = 0;
@@ -523,12 +687,20 @@ int single_race_solver(char *tFile, TronCycle **tronPut, int total) {
     //Game loop.
     while (true) {
 
-        for (l = 0; l < myTeam; l++) {
-            simulate_game(&dPol, cols, rows, tronPut[l], &node);
+        //Run simulations, choose expansion point and add a new layer of policy.
+        for (l = 0; l < total; l++) {
+            simulate_game(thisRace[l], cols, rows, tronPut[l], &node, ops, &adversary);
+        }
 
-            expand_node(tronPut[l], &dPol, &node, cols, rows);
+        for (i = 0; i < rows; i++) {
+            for (j = 0; j < cols; j++) {
+                node[i][j].block_true = 0;
+            }
+        }
 
-            select_node(&node, tronPut[l], thisRace, rows);
+        for (l = 0; l < total; l++) {
+            thisRace[l]->policy.push_back(default_weights);
+            select_node(&node, tronPut[l], thisRace[l], rows, cols);
         }
 
         if (ops > 0) {
@@ -537,21 +709,24 @@ int single_race_solver(char *tFile, TronCycle **tronPut, int total) {
             }
         }
 
-        update_map(&adversary, tronPut, &node, thisRace,  rows, cols, ops, myTeam);
+        update_map(&adversary, tronPut, &node, thisRace,  rows, cols, ops, total);
 
         //Print the map.
-        for (i = 0; i < rows; i++) {
-            for (j = 0; j < cols; j++) {
-                cout << node[i][j].tile;
-            }
-            cout << endl;
-        }
-        cout << endl;
+//        for (i = 0; i < rows; i++) {
+//            for (j = 0; j < cols; j++) {
+//                cout << node[i][j].tile;
+//                node[i][j].reward = 0;
+//                node[i][j].visits = 1;
+//            }
+//            cout << endl;
+//        }
+//        cout << endl;
 
         //If a player has won, break.
 
-        for (i = 0; i < myTeam; i++) {
+        for (i = 0; i < total; i++) {
             if (is_terminal(tronPut[i]->posx, cols)) Pflag++;
+            if (thisRace[i]->steps > cols*2) Oflag++;
         }
 
         if (Pflag > 0) break;
@@ -569,27 +744,33 @@ int single_race_solver(char *tFile, TronCycle **tronPut, int total) {
 
     //Determine winner and return the reward.
     if (Oflag > 0) {
-        expected_reward = thisRace->expenses;
-        cout << tFile << " LOSER!!!!" << endl;
+        for (l = 0; l < total; l++) {
+            expected_reward = thisRace[l]->expenses;
+        }
+//        cout << tFile << " LOSER!!!!" << endl;
     } else {
-        expected_reward = thisRace->prize + thisRace->expenses;
-        cout << tFile << " WINNER!!!!" << endl;
+        for (l = 0; l < total; l++) {
+            expected_reward = thisRace[l]->prize + thisRace[l]->expenses;
+        }
+//        cout << tFile << " WINNER!!!!" << endl;
     }
     //Clear the memory I have used.
     for (i = 0; i < rows; i++) {
         delete [] node[i];
     }
-    for (k = 0; k < ops; k++) {
-        for (i = 0; i < rows; i++) {
-            for (j = 0; j < cols; j++) {
-                delete [] adversary[k].adPol[i][j];
+    if (ops > 0) {
+        for (k = 0; k < ops; k++) {
+            for (i = 0; i < rows; i++) {
+                for (j = 0; j < cols; j++) {
+                    delete [] adversary[k].adPol[i][j];
+                }
+                delete [] adversary[k].adPol[i];
             }
-            delete [] adversary[k].adPol[i];
         }
     }
-    delete [] node;
     delete [] adversary;
-    delete thisRace;
+    delete [] node;
+    delete [] thisRace;
 
     //Return the expected output.
     return expected_reward;

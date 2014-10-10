@@ -4,12 +4,24 @@
 //race_level.cpp.
 void *runRace (void *arg) {
 
-    int trackVal, x;
+    int i;
     Track *thisTrack;
+    int bestBet = 0;
     thisTrack = (Track *)arg;
-    cout << "I am a thread, my target file is " << thisTrack->name << endl;
-    trackVal = single_race_solver(&thisTrack->name[0], &thisTrack->cycles, thisTrack->numCycles);
-    cout << "Solved: Expected value " << trackVal << endl;
+    signed int trackVal[thisTrack->numCombo];
+
+    for (i = 0; i < thisTrack->numCombo; i++) {
+        trackVal[i] = single_race_solver(&thisTrack->name[0], &thisTrack->cycles[i], thisTrack->numCycles);
+    }
+    for (i = 0; i < thisTrack->numCombo; i++) {
+        if (trackVal[i] > trackVal[bestBet]) { bestBet = i;
+        } else if (trackVal[i] == trackVal[bestBet]) {
+            if (thisTrack->cycles[i]->price < thisTrack->cycles[bestBet]->price) bestBet = i;
+        }
+    }
+    cout << "For " << thisTrack->name << " the bests odds are with "
+        << thisTrack->cycles[bestBet][0].name << " for " << trackVal[bestBet] << endl;
+
     pthread_exit(NULL);
  }
 
@@ -56,6 +68,7 @@ int main(int argc, char* argv[]) {
         trons[j].durability = buffer[0];
         cycFile >> buffer;
         trons[j].price = atoi(buffer);
+        trons[j].ImaChurch = 0;
         if ( cycFile.eof() ) break;
         j++;
     }
@@ -88,6 +101,7 @@ int main(int argc, char* argv[]) {
         tracks[j].oCount = 0;
         tracks[j].dCount = 0;
         tracks[j].numCycles = 0;
+        tracks[j].numCombo = cCount;
         //Process a track file in a seperate buffer.
         trkFile.open(buffer, ios::in);
         //Run this to get to the costs.
@@ -132,7 +146,10 @@ int main(int argc, char* argv[]) {
         } else {
             tracks[j].pQueue = "3RW";
         }
-        sort_Cycles(trons, &tracks[j].cycles, cCount, tracks[j].numCycles, tracks[j].pQueue);
+
+        tracks[j].cycles = new TronCycle*[cCount];
+        sort_Cycles_X(trons, tracks[j].cycles, cCount, tracks[j].numCycles);
+//        tracks[j].cycles = trons;
         trkFile.close();
         if (metaTrkFile.eof() ) break;
         j++;
@@ -142,13 +159,11 @@ int main(int argc, char* argv[]) {
 
     //Create threads to run MCTS for the tracks.
     for (j = 0; j < tCount; j++) {
-        cout << tracks[j].name <<" : " << tracks[j].cycles[0].name << endl;
-        cout << tracks[j].name <<" : " << tracks[j].cycles[1].name << endl;
-//        tc = pthread_create(&raceThreads[j], NULL, runRace, (void *)&tracks[j]);
+        tc = pthread_create(&raceThreads[j], NULL, runRace, (void *)&tracks[j]);
     }
     //Wait for the race threads to terminate before continuing.
     for (j = 0; j < tCount; j++) {
-//        tc = pthread_join(raceThreads[j], NULL);
+        tc = pthread_join(raceThreads[j], NULL);
     }
 
     return 0;
