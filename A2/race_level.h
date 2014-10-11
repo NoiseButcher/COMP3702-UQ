@@ -173,8 +173,6 @@ void select_node(Node *** allNodes, TronCycle * me, GameTree * theRace, int dept
         }
     }
 
-    theRace->steps++;
-
     if (opty != me->posy) {
         srand(time(NULL)*theRace->steps*opty);
         int a = rand() % 101;
@@ -193,6 +191,14 @@ void select_node(Node *** allNodes, TronCycle * me, GameTree * theRace, int dept
 
     me->posx = optx;
     me->posy = opty;
+
+    if ((*allNodes)[opty][optx].isDist() && me->reliability == 'N') {
+        theRace->expenses -= 75;
+    } else if ((*allNodes)[opty][optx].isDist() && me->reliability == 'R') {
+        theRace->expenses -= 10;
+    }
+
+    theRace->steps++;
 }
 
 //Chooses an action at random.
@@ -294,6 +300,12 @@ void select_node_X(Node *** allNodes, TronCycle * me, GameTree * theRace, int de
     me->posx = optx;
     me->posy = opty;
 
+    if ((*allNodes)[opty][optx].isDist() && me->reliability == 'N') {
+        theRace->expenses -= 75;
+    } else if ((*allNodes)[opty][optx].isDist() && me->reliability == 'R') {
+        theRace->expenses -= 10;
+    }
+
     theRace->steps++;
 }
 
@@ -332,6 +344,7 @@ void simulate_game(GameTree ** theTruth, int length, int depth, TronCycle ** me,
         chariots[i]->posx = opponents[i]->posx;
         chariots[i]->posy = opponents[i]->posy;
     }
+
     autoPilot = new TronCycle*[num];
     for (i = 0; i < num; i++) {
         autoPilot[i] = new TronCycle;
@@ -343,7 +356,6 @@ void simulate_game(GameTree ** theTruth, int length, int depth, TronCycle ** me,
         autoPilot[i]->ImaChurch = me[i]->ImaChurch;
         valX[i] = me[i]->posx;
     }
-
     //Run solo simulations until a hard limit is reached OR
     //enough wins have been achieved.
     while (true) {
@@ -571,10 +583,11 @@ void update_map(Adversary ** them, TronCycle ** me, Node *** allNodes,
     }
 }
 
-int single_race_solver(char *tFile, TronCycle **tronPut, int total) {
+int single_race_solver(char * tFile, TronCycle * tronIn, int total) {
 
     GameTree ** thisRace;
     Node ** node;
+    TronCycle ** tronPut;
     Adversary ** adversary;
     char buffer[1000];
     int rows, cols, ops, i, j, k, l;
@@ -594,6 +607,15 @@ int single_race_solver(char *tFile, TronCycle **tronPut, int total) {
         thisRace[l]->policy.push_back(default_weights);
     }
 
+    tronPut = new TronCycle*[total];
+    for (l = 0; l < total; l++) {
+        tronPut[l] = new TronCycle;
+        tronPut[l]->durability = tronIn[l].durability;
+        tronPut[l]->reliability = tronIn[l].reliability;
+        tronPut[l]->MaxSpeed = tronIn[l].MaxSpeed;
+        tronPut[l]->price = tronIn[l].price;
+    }
+
     //open the track file -- first argument.
     fstream infile;
     infile.open(tFile, ios::in);
@@ -604,6 +626,7 @@ int single_race_solver(char *tFile, TronCycle **tronPut, int total) {
     infile >> buffer;
     ops = atoi(buffer);
     infile >> buffer;
+    //Register my dudes.
     for (l = 0; l < total; l++) {
         thisRace[l]->expenses -= atoi(buffer);
     }
@@ -617,6 +640,7 @@ int single_race_solver(char *tFile, TronCycle **tronPut, int total) {
         default_weights[5] = 0;
         default_weights[6] = 0;
     }
+
 
     //Init the map as a matrix of node structs.
     node = new Node*[rows];
@@ -648,6 +672,7 @@ int single_race_solver(char *tFile, TronCycle **tronPut, int total) {
                 tronPut[l]->posx = j;
                 tronPut[l]->posy = i;
                 tronPut[l]->ID = buffer[j];
+                tronPut[l]->ImaChurch = 0;
 //                thisRace[l]->expenses -= tronPut[l]->price;
                 l++;
 
@@ -793,12 +818,15 @@ int single_race_solver(char *tFile, TronCycle **tronPut, int total) {
     //Determine winner and return the reward.
     if (Oflag > 0) {
         for (l = 0; l < total; l++) {
-            expected_reward = thisRace[l]->expenses;
+            expected_reward += thisRace[l]->expenses;
+//            cout << thisRace[l]->expenses << endl;
         }
 //        cout << tFile << " LOSER!!!!" << endl;
     } else {
+        expected_reward += thisRace[0]->prize;
         for (l = 0; l < total; l++) {
-            expected_reward = thisRace[l]->prize + thisRace[l]->expenses;
+            expected_reward += thisRace[l]->expenses;
+//            cout << thisRace[l]->expenses << endl;
         }
 //        cout << tFile << " WINNER!!!!" << endl;
     }
@@ -816,6 +844,10 @@ int single_race_solver(char *tFile, TronCycle **tronPut, int total) {
             }
         }
     }
+    for (i = 0; i < total; i++) {
+        delete tronPut[i];
+    }
+    delete [] tronPut;
     delete [] adversary;
     delete [] node;
     delete [] thisRace;

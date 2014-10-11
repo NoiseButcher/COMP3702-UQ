@@ -3,9 +3,11 @@
 //Function to run races within the threads. Most of the functionality here is handled in
 //race_level.cpp.
 void *runRace (void *arg) {
+    int i;
     Track * thisTrack;
     thisTrack = (Track *)arg;
-    thisTrack->result = single_race_solver(&thisTrack->name[0], &thisTrack->cycles, thisTrack->numCycles);
+
+    thisTrack->result = single_race_solver(&thisTrack->name[0], thisTrack->cycles, thisTrack->numCycles);
     pthread_exit(NULL);
  }
 
@@ -13,7 +15,7 @@ int main(int argc, char* argv[]) {
 
     char buffer[1000];
     char subBuffer[1000];
-    int capital, i, j, k, tc, tCount, cCount, z, maxCombo;
+    int capital, i, j, k, tc, tCount, cCount, z, maxCombo, trackNum;
     signed int tRows, tCols;
     Track solveMe;
 
@@ -66,8 +68,7 @@ int main(int argc, char* argv[]) {
     fstream trkFile;
     metaTrkFile.open(argv[2], ios::in);
     metaTrkFile >> buffer;
-    tCount = atoi(buffer);
-
+    trackNum = atoi(buffer);
     //Initialise the threads for race processing.
 
     //Initialise the track data structures.
@@ -77,11 +78,13 @@ int main(int argc, char* argv[]) {
     metaTrkFile >> buffer;
     capital = atoi(buffer);
 
+    tc = 0;
     j = 0;
     maxCombo = 1;
     //Populate the track list.
     while (true) {
         metaTrkFile >> buffer;
+
         if (metaTrkFile.eof() ) break;
         while (true) {
             solveMe.name = buffer;
@@ -121,11 +124,20 @@ int main(int argc, char* argv[]) {
         z = 0;
 
     }
+
     metaTrkFile.close();
     tCount = j;
-    allCombos = new TronCycle*[maxCombo*cCount];
+    int beta = maxCombo*cCount;
+    allCombos = new TronCycle*[beta];
+    Result results[beta];
     sort_Cycles_X(trons, allCombos, cCount, maxCombo);
 
+//    for (i = 0; i < beta; i++) {
+//        for (j = 0; j < cCount; j++) {
+//            cout << allCombos[i][j].name << " ";
+//        }
+//        cout << endl;
+//    }
 
     pthread_t raceThreads[tCount];
 
@@ -134,12 +146,15 @@ int main(int argc, char* argv[]) {
     for (j = 0; j < tCount; j++) {
         if (i < (cCount*(tracks[j].numCycles - 1))) tracks[j].numCycles--;
         tracks[j].cycles = new TronCycle[tracks[j].numCycles];
+//        cout << j << " : " << tracks[j].numCycles << endl;
         for (k = 0; k < tracks[j].numCycles; k++) {
             tracks[j].cycles[k] = allCombos[i][k];
         }
+//        for (k = 0; k < tracks[j].numCycles; k++) {
+//            cout << tracks[j].cycles[k].name << " ";
+//        }
+//        cout <<  tracks[j].numCycles << endl;
         tc = pthread_create(&raceThreads[j], NULL, runRace, (void *)&tracks[j]);
-
-
         if (j < tCount - 1) {
             if ((tracks[j].name != tracks[j+1].name)) {
                 i = 0;
@@ -149,15 +164,51 @@ int main(int argc, char* argv[]) {
         } else {
             i++;
         }
-        if (i >= 2*maxCombo) i = 0;
+        if (i >= beta) i = 0;
     }
     //Wait for the race threads to terminate before continuing.
     for (j = 0; j < tCount; j++) {
         tc = pthread_join(raceThreads[j], NULL);
-        cout << tracks[j].result << endl;
+        cout << tracks[j].name << " : " << tracks[j].result << endl;
     }
 
+//    for (k = 0; k < trackNum; k++) {
+////        cout << results[k].trackName << endl;
+//        for (i = 0; i < cCount; i++) {
+//            for (j = 0; j < tCount; j++) {
+//                if (in_Race(tracks[j].cycles, trons[i].name, tracks[j].numCycles)) {
+//                    results[k].bestResults[i] += tracks[j].result;
+//                }
+//            }
+//            results[k].bestResults[i] -= trons[i].price;
+//            cout << results[k].Bnames[i] << " " << results[k].bestResults[i] << endl;
+//        }
+//    }
+//
+//    string panicButton;
+//    int panicBacon;
+//
+//    for (k = 0; k < cCount; k++) {
+//        for (i = 0; i < trackNum; i++) {
+//            for (j = 1; j < cCount; j++) {
+//                if (results[i].bestResults[j] > results[i].bestResults[j-1]) {
+//                    panicButton = results[i].Bnames[j];
+//                    panicBacon = results[i].bestResults[j];
+//                    results[i].bestResults[j] = results[i].bestResults[j-1];
+//                    results[i].Bnames[j] = results[i].Bnames[j - 1];
+//                    results[i].Bnames[j - 1] = panicButton;
+//                    results[i].bestResults[j - 1] = panicBacon;
+//                }
+//
+//            }
+//        }
+//    }
 
+//    for(k = 0; k < trackNum; k++) {
+//        for (i = 0; i < cCount; i++) {
+////            cout << results[k].Bnames[i] << " " << results[k].bestResults[i] << endl;
+//        }
+//    }
 
     //Memory cleanup.
     for (j = 0; j < tCount; j++) {

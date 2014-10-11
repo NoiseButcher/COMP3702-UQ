@@ -29,10 +29,11 @@ class TronCycle {
 
 };
 
-class Combo {
+class Result {
     public:
-        int numCycles;
-        TronCycle * cycles;
+        string trackName;
+        string * Bnames;
+        int * bestResults;
 };
 
 class Track {
