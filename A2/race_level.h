@@ -299,28 +299,32 @@ void select_node_X(Node *** allNodes, TronCycle * me, GameTree * theRace, int de
 
 //Runs the simulation for a game with a temporary TronCycle and Policy until
 //a terminal state is reached, then deletes the temporary things.
-void simulate_game(GameTree * theTruth, int length, int depth, TronCycle * me, Node *** allNodes, int ops,
-    Adversary ** opponents) {
+void simulate_game(GameTree ** theTruth, int length, int depth, TronCycle ** me, Node *** allNodes, int ops,
+    Adversary ** opponents, int num) {
 
-    int valX, simSteps, i, j, maxSteps;
+    int simSteps, i, j, maxSteps;
+    int valX[num];
     float default_weights[] = {1, 1, 1, 1, 1, 1, 1};
     if (ops == 0) {
         default_weights[5] = 0;
         default_weights[6] = 0;
     }
-    valX = me->posx;
 
     int DoomFlag = 0;
+    int YayFlag = 0;
 
-    GameTree * simTree;
-    TronCycle *autoPilot;
-    Adversary **chariots;
+    GameTree ** simTree;
+    TronCycle ** autoPilot;
+    Adversary ** chariots;
 
-    simTree = new GameTree;
-    simTree->policy.push_back(default_weights);
-    simTree->steps = 0;
-    simTree->prize = theTruth->prize;
-    autoPilot = new TronCycle;
+    simTree = new GameTree*[num];
+    for (i = 0; i < num; i++) {
+        simTree[i] = new GameTree;
+        simTree[i]->policy.push_back(default_weights);
+        simTree[i]->steps = 0;
+        simTree[i]->prize = theTruth[i]->prize;
+    }
+
     chariots = new Adversary*[ops];
     for (i = 0; i < ops; i++) {
         chariots[i] = new Adversary;
@@ -328,28 +332,45 @@ void simulate_game(GameTree * theTruth, int length, int depth, TronCycle * me, N
         chariots[i]->posx = opponents[i]->posx;
         chariots[i]->posy = opponents[i]->posy;
     }
-    autoPilot->durability = me->durability;
-    autoPilot->posx = me->posx;
-    autoPilot->posy = me->posy;
-    autoPilot->MaxSpeed = me->MaxSpeed;
-    autoPilot->reliability = me->reliability;
-    autoPilot->ImaChurch = me->ImaChurch;
+    autoPilot = new TronCycle*[num];
+    for (i = 0; i < num; i++) {
+        autoPilot[i] = new TronCycle;
+        autoPilot[i]->durability = me[i]->durability;
+        autoPilot[i]->posx = me[i]->posx;
+        autoPilot[i]->posy = me[i]->posy;
+        autoPilot[i]->MaxSpeed = me[i]->MaxSpeed;
+        autoPilot[i]->reliability = me[i]->reliability;
+        autoPilot[i]->ImaChurch = me[i]->ImaChurch;
+        valX[i] = me[i]->posx;
+    }
 
     //Run solo simulations until a hard limit is reached OR
     //enough wins have been achieved.
     while (true) {
+        for (i = 0; i < num; i++) {
+            simTree[i]->policy.push_back(default_weights);
+            expand_node(autoPilot[i], simTree[i]->policy[simTree[i]->steps], allNodes, length, depth);
+            select_node_X(allNodes, autoPilot[i], simTree[i], depth, length);
+            valX[i] = autoPilot[i]->posx;
+            if (simTree[i]->steps > length*2) DoomFlag++;
+            if (is_terminal(valX[i], length)) {
+                YayFlag++;
+                maxSteps = simTree[i]->steps;
+            }
+            if (DoomFlag + YayFlag > 0) break;
+        }
 
-        simTree->policy.push_back(default_weights);
-        expand_node(autoPilot, simTree->policy[simTree->steps], allNodes, length, depth);
-        select_node_X(allNodes, autoPilot, simTree, depth, length);
-        valX = autoPilot->posx;
         //If I win this simulation, backtrack, and boost reward for actions.
-        if (is_terminal(valX, length)) {
-            update_gametree_sim(simTree, 8);
-            autoPilot->posx = me->posx;
-            autoPilot->posy = me->posy;
-            autoPilot->ImaChurch = me->ImaChurch;
-            valX = autoPilot->posx;
+        if (YayFlag > 0) {
+            for (i = 0; i < num; i++) {
+                update_gametree_sim(simTree[i], 8);
+                autoPilot[i]->posx = me[i]->posx;
+                autoPilot[i]->posy = me[i]->posy;
+                autoPilot[i]->ImaChurch = me[i]->ImaChurch;
+                valX[i] = autoPilot[i]->posx;
+                maxSteps = simTree[i]->steps;
+                simTree[i]->steps = 0;
+            }
             for (i = 0; i < ops; i++) {
                 chariots[i]->posx = opponents[i]->posx;
                 chariots[i]->posy = opponents[i]->posy;
@@ -368,15 +389,17 @@ void simulate_game(GameTree * theTruth, int length, int depth, TronCycle * me, N
             move_adversary(chariots[i], allNodes, length, depth);
             if (is_terminal(chariots[i]->posx, length)) DoomFlag = 1;
         }
-        if (simTree->steps > length*2) DoomFlag++;
+
         //If the opponents win, backtrack and reset the map.
         if (DoomFlag > 0) {
-            update_gametree_sim(simTree, 0);
-            autoPilot->posx = me->posx;
-            autoPilot->posy = me->posy;
-            autoPilot->ImaChurch = me->ImaChurch;
-            valX = autoPilot->posx;
-            autoPilot->ImaChurch = me->ImaChurch;
+            for (i = 0; i < num; i++) {
+                update_gametree_sim(simTree[i], 0);
+                autoPilot[i]->posx = me[i]->posx;
+                autoPilot[i]->posy = me[i]->posy;
+                autoPilot[i]->ImaChurch = me[i]->ImaChurch;
+                valX[i] = autoPilot[i]->posx;
+                simTree[i]->steps = 0;
+            }
             for (i = 0; i < ops; i++) {
                 chariots[i]->posx = opponents[i]->posx;
                 chariots[i]->posy = opponents[i]->posy;
@@ -392,30 +415,44 @@ void simulate_game(GameTree * theTruth, int length, int depth, TronCycle * me, N
         }
     }
 
-    maxSteps = simTree->steps;
-    simTree->steps = 0;
+
+    YayFlag = 0;
     DoomFlag = 0;
     simSteps = 0;
 
     while (simSteps < 20*length) {
 
-        expand_node(autoPilot, simTree->policy[simTree->steps], allNodes, length, depth);
-        select_node_X(allNodes, autoPilot, simTree, depth, length);
-        if (simTree->steps >= maxSteps) {
-            simTree->policy.push_back(default_weights);
-            maxSteps++;
+        for (i = 0; i < num; i++) {
+            if (simTree[i]->steps >= maxSteps) {
+                simTree[i]->policy.push_back(default_weights);
+                maxSteps++;
+            } else if (simTree[i]->steps < maxSteps) {
+                simTree[i]->policy.push_back(default_weights);
+            }
         }
-        valX = autoPilot->posx;
+
+        for (i = 0; i < num; i++) {
+            expand_node(autoPilot[i], simTree[i]->policy[simTree[i]->steps], allNodes, length, depth);
+            select_node_X(allNodes, autoPilot[i], simTree[i], depth, length);
+            valX[i] = autoPilot[i]->posx;
+            if (simTree[i]->steps > length*2) DoomFlag++;
+            if (is_terminal(valX[i], length)) YayFlag++;
+            if (DoomFlag + YayFlag > 0) break;
+        }
         //If I win this simulation, backtrack, and boost reward for actions.
-        if (is_terminal(valX, length)) {
-            update_gametree_sim(simTree, 8);
+        if (YayFlag > 0) {
+            DoomFlag = 0;
+            YayFlag = 0;
+            for ( i = 0; i < num; i++) {
+                update_gametree_sim(simTree[i], 8);
+                simTree[i]->steps = 0;
+                autoPilot[i]->posx = me[i]->posx;
+                autoPilot[i]->posy = me[i]->posy;
+                autoPilot[i]->ImaChurch = me[i]->ImaChurch;
+                valX[i] = autoPilot[i]->posx;
+                autoPilot[i]->ImaChurch = me[i]->ImaChurch;
+            }
             simSteps++;
-            simTree->steps = 0;
-            autoPilot->posx = me->posx;
-            autoPilot->posy = me->posy;
-            autoPilot->ImaChurch = me->ImaChurch;
-            valX = autoPilot->posx;
-            autoPilot->ImaChurch = me->ImaChurch;
             for (i = 0; i < ops; i++) {
                 chariots[i]->posx = opponents[i]->posx;
                 chariots[i]->posy = opponents[i]->posy;
@@ -428,23 +465,24 @@ void simulate_game(GameTree * theTruth, int length, int depth, TronCycle * me, N
                 }
             }
         }
-
         for (i = 0; i < ops; i++) {
             move_adversary(chariots[i], allNodes, length, depth);
             if (is_terminal(chariots[i]->posx, length)) DoomFlag = 1;
         }
-        if (simTree->steps > length*2) DoomFlag++;
         //If the opponents win, backtrack and reset the map.
         if (DoomFlag > 0) {
             DoomFlag = 0;
-            update_gametree_sim(simTree, 0);
+            YayFlag = 0;
+            for ( i = 0; i < num; i++) {
+                update_gametree_sim(simTree[i], 0);
+                simTree[i]->steps = 0;
+                autoPilot[i]->posx = me[i]->posx;
+                autoPilot[i]->posy = me[i]->posy;
+                autoPilot[i]->ImaChurch = me[i]->ImaChurch;
+                valX[i] = autoPilot[i]->posx;
+                autoPilot[i]->ImaChurch = me[i]->ImaChurch;
+            }
             simSteps++;
-            simTree->steps = 0;
-            autoPilot->posx = me->posx;
-            autoPilot->posy = me->posy;
-            autoPilot->ImaChurch = me->ImaChurch;
-            valX = autoPilot->posx;
-            autoPilot->ImaChurch = me->ImaChurch;
             for (i = 0; i < ops; i++) {
                 chariots[i]->posx = opponents[i]->posx;
                 chariots[i]->posy = opponents[i]->posy;
@@ -459,14 +497,22 @@ void simulate_game(GameTree * theTruth, int length, int depth, TronCycle * me, N
         }
     }
 
-    update_gametree(theTruth, simTree);
+    for (i = 0; i < num; i++) {
+        update_gametree(theTruth[i], simTree[i]);
+    }
 
     for (i = 0; i < ops; i++) {
         delete chariots[i];
     }
     delete [] chariots;
-    delete simTree;
-    delete autoPilot;
+    for (i = 0; i < num; i++) {
+        delete simTree[i];
+    }
+    delete [] simTree;
+    for (i = 0; i < num; i++) {
+        delete autoPilot[i];
+    }
+    delete [] autoPilot;
 }
 
 void update_map(Adversary ** them, TronCycle ** me, Node *** allNodes,
@@ -529,7 +575,7 @@ int single_race_solver(char *tFile, TronCycle **tronPut, int total) {
 
     GameTree ** thisRace;
     Node ** node;
-    Adversary * adversary;
+    Adversary ** adversary;
     char buffer[1000];
     int rows, cols, ops, i, j, k, l;
     float default_weights[] = {1, 1, 1, 1, 1, 1, 1};
@@ -575,7 +621,7 @@ int single_race_solver(char *tFile, TronCycle **tronPut, int total) {
     //Init the map as a matrix of node structs.
     node = new Node*[rows];
     if (ops > 0) {
-        adversary = new Adversary[ops];
+        adversary = new Adversary*[ops];
     }
 
     l = 0;
@@ -608,11 +654,11 @@ int single_race_solver(char *tFile, TronCycle **tronPut, int total) {
             //Register an opponent cycle if they exist, and assume they
             //have mint specs.
             } else if (buffer[j] < 75 && buffer[j] > 64 && k < ops && ops > 0) {
-                adversary[k].ID = buffer[j];
-                adversary[k].posx = j;
-                adversary[k].posy = i;
+                adversary[k] = new Adversary;
+                adversary[k]->ID = buffer[j];
+                adversary[k]->posx = j;
+                adversary[k]->posy = i;
                 k++;
-
             //If its a distractor construct the thing.
             } else if (buffer[j] > 96) {
                 node[i][j].dist_true = 1;
@@ -620,6 +666,8 @@ int single_race_solver(char *tFile, TronCycle **tronPut, int total) {
 
             } else if (buffer[j] == '1') {
                 node[i][j].obs_true = 1;
+            } else {
+                node[i][j].tile = '0';
             }
         }
     }
@@ -631,15 +679,15 @@ int single_race_solver(char *tFile, TronCycle **tronPut, int total) {
         while (true) {
             infile >> buffer;
             while (i < ops) {
-                if (adversary[i].ID == buffer[0]) {
-                    adversary[i].adPol = new float**[rows];
+                if (adversary[i]->ID == buffer[0]) {
+                    adversary[i]->adPol = new float**[rows];
                     for (j = 0; j < rows ; j++) {
-                        adversary[i].adPol[j] = new float*[cols];
+                        adversary[i]->adPol[j] = new float*[cols];
                         for (l = 0; l < cols; l++) {
-                            adversary[i].adPol[j][l] = new float[8];
+                            adversary[i]->adPol[j][l] = new float[6];
                             for (k = 0; k < 6; k++) {
                                 infile >> buffer;
-                                adversary[i].adPol[j][l][k] = (atof(buffer));
+                                adversary[i]->adPol[j][l][k] = (atof(buffer));
                             }
                         }
                     }
@@ -656,7 +704,9 @@ int single_race_solver(char *tFile, TronCycle **tronPut, int total) {
 
     //Get distractor details.
     while (true) {
-        infile >> buffer;
+        if (buffer[0] < 97) {
+            infile >> buffer;
+        }
         for (i = 0; i < rows; i++) {
             for (j = 0; j < cols; j++) {
                 if (node[i][j].tile[0] == buffer[0]) {
@@ -688,9 +738,7 @@ int single_race_solver(char *tFile, TronCycle **tronPut, int total) {
     while (true) {
 
         //Run simulations, choose expansion point and add a new layer of policy.
-        for (l = 0; l < total; l++) {
-            simulate_game(thisRace[l], cols, rows, tronPut[l], &node, ops, &adversary);
-        }
+        simulate_game(thisRace, cols, rows, tronPut, &node, ops, adversary, total);
 
         for (i = 0; i < rows; i++) {
             for (j = 0; j < cols; j++) {
@@ -705,11 +753,11 @@ int single_race_solver(char *tFile, TronCycle **tronPut, int total) {
 
         if (ops > 0) {
             for (i = 0; i < ops; i++) {
-                move_adversary(&adversary[i], &node, cols, rows);
+                move_adversary(adversary[i], &node, cols, rows);
             }
         }
 
-        update_map(&adversary, tronPut, &node, thisRace,  rows, cols, ops, total);
+        update_map(adversary, tronPut, &node, thisRace,  rows, cols, ops, total);
 
         //Print the map.
 //        for (i = 0; i < rows; i++) {
@@ -734,7 +782,7 @@ int single_race_solver(char *tFile, TronCycle **tronPut, int total) {
         //If an adversary has won, set the flag and break.
         if (ops > 0) {
             for (i = 0; i < ops; i++) {
-                if (is_terminal(adversary[i].posx, cols)) Oflag++;
+                if (is_terminal(adversary[i]->posx, cols)) Oflag++;
             }
         }
 
@@ -762,9 +810,9 @@ int single_race_solver(char *tFile, TronCycle **tronPut, int total) {
         for (k = 0; k < ops; k++) {
             for (i = 0; i < rows; i++) {
                 for (j = 0; j < cols; j++) {
-                    delete [] adversary[k].adPol[i][j];
+                    delete [] adversary[k]->adPol[i][j];
                 }
-                delete [] adversary[k].adPol[i];
+                delete [] adversary[k]->adPol[i];
             }
         }
     }

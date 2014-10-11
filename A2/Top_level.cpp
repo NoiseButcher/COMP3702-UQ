@@ -3,25 +3,9 @@
 //Function to run races within the threads. Most of the functionality here is handled in
 //race_level.cpp.
 void *runRace (void *arg) {
-
-    int i;
-    Track *thisTrack;
-    int bestBet = 0;
+    Track * thisTrack;
     thisTrack = (Track *)arg;
-    signed int trackVal[thisTrack->numCombo];
-
-    for (i = 0; i < thisTrack->numCombo; i++) {
-        trackVal[i] = single_race_solver(&thisTrack->name[0], &thisTrack->cycles[i], thisTrack->numCycles);
-    }
-    for (i = 0; i < thisTrack->numCombo; i++) {
-        if (trackVal[i] > trackVal[bestBet]) { bestBet = i;
-        } else if (trackVal[i] == trackVal[bestBet]) {
-            if (thisTrack->cycles[i]->price < thisTrack->cycles[bestBet]->price) bestBet = i;
-        }
-    }
-    cout << "For " << thisTrack->name << " the bests odds are with "
-        << thisTrack->cycles[bestBet][0].name << " for " << trackVal[bestBet] << endl;
-
+    thisTrack->result = single_race_solver(&thisTrack->name[0], &thisTrack->cycles, thisTrack->numCycles);
     pthread_exit(NULL);
  }
 
@@ -29,8 +13,9 @@ int main(int argc, char* argv[]) {
 
     char buffer[1000];
     char subBuffer[1000];
-    int capital, i, j, k, tc, tCount, cCount;
+    int capital, i, j, k, tc, tCount, cCount, z, maxCombo;
     signed int tRows, tCols;
+    Track solveMe;
 
     //Error check cli here.
     if (argc != 3) {
@@ -45,6 +30,7 @@ int main(int argc, char* argv[]) {
     cycFile >> buffer;
     cCount = atoi(buffer);
     TronCycle trons[cCount];
+    TronCycle ** allCombos;
 
     j = 0;
     //Populate the array of TronCycles.
@@ -83,88 +69,101 @@ int main(int argc, char* argv[]) {
     tCount = atoi(buffer);
 
     //Initialise the threads for race processing.
-    pthread_t raceThreads[tCount];
 
     //Initialise the track data structures.
-    Track tracks[tCount];
+    vector <Track> tracks;
 
     //Get initial capital.
     metaTrkFile >> buffer;
     capital = atoi(buffer);
 
     j = 0;
+    maxCombo = 1;
     //Populate the track list.
     while (true) {
-
         metaTrkFile >> buffer;
-        tracks[j].name = buffer;
-        tracks[j].oCount = 0;
-        tracks[j].dCount = 0;
-        tracks[j].numCycles = 0;
-        tracks[j].numCombo = cCount;
-        //Process a track file in a seperate buffer.
-        trkFile.open(buffer, ios::in);
-        //Run this to get to the costs.
-        trkFile >> subBuffer;
-        tRows = atoi(subBuffer);
-        trkFile >> subBuffer;
-        tCols = atoi(subBuffer);
-        trkFile >> subBuffer;
-        trkFile >> subBuffer;
-        tracks[j].costIn = atoi(subBuffer);
-        trkFile >> subBuffer;
-        tracks[j].costOut = atoi(subBuffer);
-
-        //Use this loop to figure out how many slots are available
-        //for player use, how many obstacles exist and how many
-        //distractors exist.
-        for (i = 0; i < tRows; i++) {
-            trkFile >> subBuffer;
-            for (k = 0; k < tCols; k++) {
-                if (subBuffer[k] == '1') { tracks[j].oCount++;
-                break;
-                }
-            }
-            for (k = 0; k < tCols; k++) {
-                if (subBuffer[k] > 96) { tracks[j].dCount++;
-                break;
-                }
-            }
-            for (k = 0; k < tCols; k++) {
-                if (subBuffer[k] < 91 && subBuffer[k] > 74) { tracks[j].numCycles++;
-                }
-            }
-        }
-
-
-        if ((tRows - tracks[j].oCount < 2) && (tRows - tracks[j].dCount < 2)) {
-            tracks[j].pQueue = "WR3";
-        } else if ((tRows - tracks[j].dCount < 2) && (tracks[j].oCount > 0)) {
-            tracks[j].pQueue = "RW3";
-        } else if ((tracks[j].oCount > tracks[j].dCount) && (tracks[j].oCount > 0))  {
-            tracks[j].pQueue = "3WR";
-        } else {
-            tracks[j].pQueue = "3RW";
-        }
-
-        tracks[j].cycles = new TronCycle*[cCount];
-        sort_Cycles_X(trons, tracks[j].cycles, cCount, tracks[j].numCycles);
-//        tracks[j].cycles = trons;
-        trkFile.close();
         if (metaTrkFile.eof() ) break;
-        j++;
-    }
+        while (true) {
+            solveMe.name = buffer;
+            solveMe.numCycles = 0;
+            solveMe.totes = cCount;
+            //Process a track file in a seperate buffer.
+            trkFile.open(buffer, ios::in);
+            //Run this to get to the costs.
+            trkFile >> subBuffer;
+            tRows = atoi(subBuffer);
+            trkFile >> subBuffer;
+            tCols = atoi(subBuffer);
+            trkFile >> subBuffer;
+            trkFile >> subBuffer;
+            solveMe.costIn = atoi(subBuffer);
+            trkFile >> subBuffer;
+            solveMe.costOut = atoi(subBuffer);
 
+            //Use this loop to figure out how many slots are available
+            //for player use, how many obstacles exist and how many
+            //distractors exist.
+            for (i = 0; i < tRows; i++) {
+                trkFile >> subBuffer;
+                for (k = 0; k < tCols; k++) {
+                    if (subBuffer[k] < 91 && subBuffer[k] > 74) {
+                        solveMe.numCycles++;
+                        if (solveMe.numCycles > maxCombo) maxCombo = solveMe.numCycles;
+                    }
+                }
+            }
+            z++;
+            j++;
+            trkFile.close();
+            tracks.push_back(solveMe);
+            if (z >= tracks[j-1].numCycles * cCount) break;
+        }
+        z = 0;
+
+    }
     metaTrkFile.close();
+    tCount = j;
+    allCombos = new TronCycle*[maxCombo*cCount];
+    sort_Cycles_X(trons, allCombos, cCount, maxCombo);
+
+
+    pthread_t raceThreads[tCount];
 
     //Create threads to run MCTS for the tracks.
+    i = 0;
     for (j = 0; j < tCount; j++) {
+        if (i < (cCount*(tracks[j].numCycles - 1))) tracks[j].numCycles--;
+        tracks[j].cycles = new TronCycle[tracks[j].numCycles];
+        for (k = 0; k < tracks[j].numCycles; k++) {
+            tracks[j].cycles[k] = allCombos[i][k];
+        }
         tc = pthread_create(&raceThreads[j], NULL, runRace, (void *)&tracks[j]);
+
+
+        if (j < tCount - 1) {
+            if ((tracks[j].name != tracks[j+1].name)) {
+                i = 0;
+            } else {
+                i++;
+            }
+        } else {
+            i++;
+        }
+        if (i >= 2*maxCombo) i = 0;
     }
     //Wait for the race threads to terminate before continuing.
     for (j = 0; j < tCount; j++) {
         tc = pthread_join(raceThreads[j], NULL);
+        cout << tracks[j].result << endl;
     }
 
+
+
+    //Memory cleanup.
+    for (j = 0; j < tCount; j++) {
+        delete [] tracks[j].cycles;
+    }
+
+    delete [] allCombos;
     return 0;
 }

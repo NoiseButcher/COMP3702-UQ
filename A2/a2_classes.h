@@ -38,14 +38,12 @@ class Combo {
 class Track {
     public:
         string name;
-        string pQueue;
         int costIn;
         int costOut;
-        TronCycle ** cycles;
+        TronCycle * cycles;
         int numCycles;
-        int numCombo;
-        int dCount;
-        int oCount;
+        int totes;
+        int result;
 };
 
 class Distractor {
