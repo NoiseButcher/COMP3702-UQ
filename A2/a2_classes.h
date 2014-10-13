@@ -29,11 +29,25 @@ class TronCycle {
 
 };
 
+class OutPut {
+    public:
+        string * track;
+        int * indexes;
+        int profit;
+        int numCycles;
+};
+
 class Result {
     public:
-        string trackName;
-        string * Bnames;
+        string * CycleName;
+        string * Tnames;
         int * bestResults;
+        int sizeOf;
+        int totalLoss;
+        int profitThree;
+        int profitTwo;
+        int profitOne;
+        int * Raceindex;
 };
 
 class Track {
@@ -41,6 +55,7 @@ class Track {
         string name;
         int costIn;
         int costOut;
+        int cycleCost;
         TronCycle * cycles;
         int numCycles;
         int totes;
