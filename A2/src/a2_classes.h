@@ -20,12 +20,8 @@ class TronCycle {
         signed int posy;
         int ImaChurch;
         int MaxSpeed;
-        int has_attr (char a) {
-            if (a == durability) { return 1;
-            } else if (a == reliability) { return 1;
-            } else if (a - 48 <=  MaxSpeed) { return 1;
-            } else return 0;
-        }
+        vector <float> damages;
+        vector <string> action;
 
 };
 
@@ -33,20 +29,21 @@ class OutPut {
     public:
         string * track;
         int * indexes;
-        int profit;
+        signed int profit;
         int numCycles;
+        vector <string> display;
 };
 
 class Result {
     public:
         string * CycleName;
         string * Tnames;
-        int * bestResults;
+        signed int * bestResults;
         int sizeOf;
-        int totalLoss;
-        int profitThree;
-        int profitTwo;
-        int profitOne;
+        signed int totalLoss;
+        signed int profitThree;
+        signed int profitTwo;
+        signed int profitOne;
         int * Raceindex;
 };
 
@@ -59,7 +56,7 @@ class Track {
         TronCycle * cycles;
         int numCycles;
         int totes;
-        int result;
+        signed int result;
 };
 
 class Distractor {
@@ -67,7 +64,7 @@ class Distractor {
         float p;
         char ID;
         int isActive (void) {
-            srand(time(NULL));
+            srand(time(NULL)*p*0.928);
             int x = rand() % 100;
             if (x < (p*100)) {return 1; }
             else {return 0; }
@@ -93,7 +90,7 @@ class Node {
             if (tile[0] > 64 && tile[0] < 75) { return 1;}
             else { return 0;}
         }
-        float value (void) { return (reward/visits); }
+        float value (void) { return (reward/visits)*distractor.p; }
 };
 
 class Adversary {
@@ -111,10 +108,10 @@ class GameTree {
         int raceLen;
         int prize;
         signed int expenses;
-        int best_child (int a) {
+        int best_child (int a, int maxDex) {
             int y;
             int x = 0;
-            for (y = 1; y < 7; y++) {
+            for (y = 1; y < maxDex; y++) {
                 if (policy[a][y] > policy[a][x]) x = y;
             }
             return x;

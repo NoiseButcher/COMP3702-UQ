@@ -7,6 +7,7 @@ int single_race_solver(char * tFile, TronCycle * tronIn, int total) {
     TronCycle ** tronPut;
     Adversary ** adversary;
     char buffer[1000];
+    char buffer2[1000];
     int rows, cols, ops, i, j, k, l;
     float default_weights[] = {1, 1, 1, 1, 1, 1, 1};
 
@@ -58,15 +59,14 @@ int single_race_solver(char * tFile, TronCycle * tronIn, int total) {
         default_weights[6] = 0;
     }
 
-
     //Init the map as a matrix of node structs.
-    node = new Node*[rows];
     if (ops > 0) {
         adversary = new Adversary*[ops];
     }
 
     l = 0;
     k = 0;
+    node = new Node*[rows];
     //Populate the nodes.
     for (i = 0; i < rows; i++) {
         infile >> buffer;
@@ -115,7 +115,6 @@ int single_race_solver(char * tFile, TronCycle * tronIn, int total) {
     }
 
     i = 0;
-
     //Get Adversary deets.
     if (ops > 0) {
         while (true) {
@@ -149,13 +148,11 @@ int single_race_solver(char * tFile, TronCycle * tronIn, int total) {
         if (buffer[0] < 97) {
             infile >> buffer;
         }
+        infile >> buffer2;
         for (i = 0; i < rows; i++) {
             for (j = 0; j < cols; j++) {
-                if (node[i][j].tile[0] == buffer[0]) {
-                    infile >> buffer;
-                    node[i][j].distractor.p = atof(buffer);
-                    i = rows;
-                    j = cols;
+                if (node[i][j].distractor.ID == buffer[0]) {
+                    node[i][j].distractor.p = atof(buffer2);
                 }
             }
         }
@@ -164,88 +161,52 @@ int single_race_solver(char * tFile, TronCycle * tronIn, int total) {
 
     infile.close();
 
-//    Print the inital state of the map.
-//    for (i = 0; i < rows; i++) {
-//        for (j = 0; j < cols; j++) {
-//            cout << node[i][j].tile;
-//        }
-//        cout << endl;
-//    }
-//    cout << endl;
-
     int Oflag = 0;
     int Pflag = 0;
 
     //Game loop.
     while (true) {
-
         //Run simulations, choose expansion point and add a new layer of policy.
         simulate_game(thisRace, cols, rows, tronPut, &node, ops, adversary, total);
-
         for (i = 0; i < rows; i++) {
             for (j = 0; j < cols; j++) {
                 node[i][j].block_true = 0;
             }
         }
-
         for (l = 0; l < total; l++) {
             thisRace[l]->policy.push_back(default_weights);
-            select_node(&node, tronPut[l], thisRace[l], rows, cols);
+            select_node(&node, tronPut[l], thisRace[l], rows, cols, ops);
         }
-
         if (ops > 0) {
             for (i = 0; i < ops; i++) {
                 move_adversary(adversary[i], &node, cols, rows);
             }
         }
-
         update_map(adversary, tronPut, &node, thisRace,  rows, cols, ops, total);
-
-        //Print the map.
-//        for (i = 0; i < rows; i++) {
-//            for (j = 0; j < cols; j++) {
-//                cout << node[i][j].tile;
-//                node[i][j].reward = 0;
-//                node[i][j].visits = 1;
-//            }
-//            cout << endl;
-//        }
-//        cout << endl;
-
-        //If a player has won, break.
-
         for (i = 0; i < total; i++) {
             if (is_terminal(tronPut[i]->posx, cols)) Pflag++;
             if (thisRace[i]->steps > cols*2) Oflag++;
         }
-
         if (Pflag > 0) break;
-
         //If an adversary has won, set the flag and break.
         if (ops > 0) {
             for (i = 0; i < ops; i++) {
                 if (is_terminal(adversary[i]->posx, cols)) Oflag++;
             }
         }
-
         if (Oflag > 0) break;
-
     }
 
     //Determine winner and return the reward.
     if (Oflag > 0) {
         for (l = 0; l < total; l++) {
             expected_reward += thisRace[l]->expenses;
-//            cout << thisRace[l]->expenses << endl;
         }
-//        cout << tFile << " LOSER!!!!" << endl;
     } else {
         expected_reward += thisRace[0]->prize;
         for (l = 0; l < total; l++) {
             expected_reward += thisRace[l]->expenses;
-//            cout << thisRace[l]->expenses << endl;
         }
-//        cout << tFile << " WINNER!!!!" << endl;
     }
     //Clear the memory I have used.
     for (i = 0; i < rows; i++) {
@@ -259,7 +220,9 @@ int single_race_solver(char * tFile, TronCycle * tronIn, int total) {
                 }
                 delete [] adversary[k]->adPol[i];
             }
+            delete [] adversary[k]->adPol;
         }
+//        delete adversary[k];
     }
     for (i = 0; i < total; i++) {
         delete tronPut[i];

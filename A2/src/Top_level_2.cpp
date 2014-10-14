@@ -3,11 +3,15 @@
 //Function to run races within the threads. Most of the functionality here is handled in
 //race_level.cpp.
 void *runRace (void *arg) {
-    int i;
+
+    clock_t t1;
+    double duration;
     Track * thisTrack;
     thisTrack = (Track *)arg;
-
+    t1 = clock();
     thisTrack->result = single_race_solver(&thisTrack->name[0], thisTrack->cycles, thisTrack->numCycles);
+    duration = (clock() - t1 )/ CLOCKS_PER_SEC;
+    cout << thisTrack->name << " : " << duration << " seconds" << endl;
     pthread_exit(NULL);
  }
 
@@ -18,6 +22,8 @@ int main(int argc, char* argv[]) {
     int capital, i, j, k, tc, tCount, cCount, z, maxCombo, trackNum;
     signed int tRows, tCols;
     Track solveMe;
+    clock_t t1;
+    double duration;
 
     //Error check cli here.
     if (argc != 3) {
@@ -85,8 +91,8 @@ int main(int argc, char* argv[]) {
     //Populate the track list.
     while (true) {
         metaTrkFile >> buffer;
-//        if (metaTrkFile.eof() ) break;
-
+        if (metaTrkFile.eof() ) break;
+        names[tc] = buffer;
         while (true) {
             solveMe.name = buffer;
             solveMe.numCycles = 0;
@@ -123,11 +129,9 @@ int main(int argc, char* argv[]) {
             tracks.push_back(solveMe);
             if (z >= tracks[j-1].numCycles * cCount) break;
         }
-        names[tc] = buffer;
         z = 0;
         tc++;
-        if (metaTrkFile.eof() ) break;
-
+//        if (metaTrkFile.eof() ) break;
     }
 
     tc = 0;
@@ -137,7 +141,6 @@ int main(int argc, char* argv[]) {
     allCombos = new TronCycle*[beta];
     Result results[beta];
     sort_Cycles_X(trons, allCombos, cCount, maxCombo);
-
     for (i = 0; i < beta; i++) {
         results[i].totalLoss = 0;
         results[i].profitThree = 0;
@@ -161,16 +164,21 @@ int main(int argc, char* argv[]) {
     for (j = 0; j < tCount; j++) {
         if (i < (cCount*(tracks[j].numCycles - 1))) tracks[j].numCycles--;
         tracks[j].cycles = new TronCycle[tracks[j].numCycles];
-//        cout << j << " : " << tracks[j].numCycles << endl;
         for (k = 0; k < tracks[j].numCycles; k++) {
             tracks[j].cycles[k] = allCombos[i][k];
             tracks[j].cycleCost += allCombos[i][k].price;
-        }
-//        for (k = 0; k < tracks[j].numCycles; k++) {
 //            cout << tracks[j].cycles[k].name << " ";
-//        }
-//        cout <<  tracks[j].numCycles << endl;
+        }
+        /*ENABLE THIS FOR MULTI-THREADED VERSION*/
         tc = pthread_create(&raceThreads[j], NULL, runRace, (void *)&tracks[j]);
+
+        /*ENABLE THIS FOR FOR LOOP VERSION.*/
+//        t1 = clock();
+//        tracks[j].result = single_race_solver(&tracks[j].name[0], tracks[j].cycles, tracks[j].numCycles);
+//        duration = (clock() - t1 )/ CLOCKS_PER_SEC;
+//        cout << tracks[j].name << " : " << duration << " seconds" << endl;
+
+//        cout << j << endl;
         if (j < tCount - 1) {
             if ((tracks[j].name != tracks[j+1].name)) {
                 i = 0;
@@ -183,6 +191,7 @@ int main(int argc, char* argv[]) {
                         results[z].totalLoss += tracks[j].cycles[k].price;
                     }
                     results[z].sizeOf = tracks[j].numCycles;
+//                    cout << results[z].sizeOf << endl;
                     z++;
                 }
             }
@@ -200,14 +209,16 @@ int main(int argc, char* argv[]) {
         }
         if (i >= beta) i = 0;
     }
+
     i = 0;
     //Wait for the race threads to terminate before continuing.
     for (j = 0; j < tCount; j++) {
         tc = pthread_join(raceThreads[j], NULL);
+//        cout << tracks[j].name << " : " << tracks[j].result << endl;
         if (tracks[j].result > 0) {
             for (k = 0; k < beta; k++) {
                 for (i = 0; i < trackNum; i++) {
-                    if (in_Race(tracks[j].cycles, results[k].CycleName, tracks[j].numCycles)
+                    if (in_Race(tracks[j].cycles, results[k].CycleName, tracks[j].numCycles, results[k].sizeOf)
                         && (results[k].Tnames[i] == tracks[j].name)
                         && (results[k].sizeOf == tracks[j].numCycles)) {
                         results[k].bestResults[i] = tracks[j].result;
@@ -222,8 +233,8 @@ int main(int argc, char* argv[]) {
     string heapsBeef;
     int hurdyGurdy;
     int bvvt;
-    for (k = 0; k < beta; k++) {
-        for (j = 0; j < beta; j++) {
+    for (j = 0; j < beta; j++) {
+        for (k = 0; k < beta; k++) {
             for (i = 1; i < trackNum; i++) {
                 if (results[k].bestResults[i] > results[k].bestResults[i - 1]) {
                     hurdyGurdy = results[k].bestResults[i];
@@ -241,76 +252,117 @@ int main(int argc, char* argv[]) {
     }
 
     for (k = 0; k < beta; k++) {
-        for (i = 0; i < results[k].sizeOf; i++) {
-//            cout << results[k].CycleName[i] << " ";
-        }
         for (i = 0; i < 3; i++) {
             results[k].profitThree += results[k].bestResults[i];
         }
         results[k].profitThree -= results[k].totalLoss;
-//        cout << results[k].profitThree << " ";
         for (i = 0; i < 2; i++) {
             results[k].profitTwo += results[k].bestResults[i];
         }
         results[k].profitTwo -= results[k].totalLoss;
-//        cout << results[k].profitTwo << " ";
         for (i = 0; i < 1; i++) {
             results[k].profitOne += results[k].bestResults[i];
         }
         results[k].profitOne -= results[k].totalLoss;
-//        cout << results[k].profitOne << " ";
-//        cout << results[k].totalLoss << " ";
-//        cout << endl;
     }
 
     OutPut single;
     single.profit = 0;
     single.track = new string[1];
     single.indexes = new int[1];
+    for (i = 0; i < maxCombo; i++) {
+        single.display.push_back("");
+    }
+
     OutPut d_ouble;
     d_ouble.profit = 0;
     d_ouble.track = new string[2];
     d_ouble.indexes = new int[2];
+
     OutPut triple;
     triple.profit = 0;
     triple.track = new string[3];
     triple.indexes = new int[3];
 
+    int useFlag = 0;
+
    //Best single race.
     for (k = 0; k < beta; k++) {
-        if (results[k].profitOne > single.profit) {
+        if (results[k].profitOne > single.profit
+            && capital > (tracks[results[k].Raceindex[0]].costIn +
+               results[k].totalLoss)) {
             single.profit = results[k].profitOne;
             single.indexes[0] = results[k].Raceindex[0];
             single.track[0] = results[k].Tnames[0];
             single.numCycles = results[k].sizeOf;
+            for (z = 0; z < results[k].sizeOf; z++) {
+                if (z >= single.display.size()) single.display.push_back("");
+                single.display[z] = (results[k].CycleName[z]);
+            }
         }
     }
+
     //Two track solver.
     for (k = 0; k < beta; k++) {
-        if (results[k].profitTwo > d_ouble.profit) {
+        if (results[k].profitTwo > d_ouble.profit
+            && capital > (tracks[results[k].Raceindex[0]].costIn +
+               tracks[results[k].Raceindex[1]].costIn +
+               results[k].totalLoss)) {
             d_ouble.profit = results[k].profitTwo;
             d_ouble.indexes[0] = results[k].Raceindex[0];
             d_ouble.indexes[1] = results[k].Raceindex[1];
             d_ouble.track[0] = results[k].Tnames[0];
             d_ouble.track[1] = results[k].Tnames[1];
             d_ouble.numCycles = results[k].sizeOf;
+            for (z = 0; z < results[k].sizeOf; z++) {
+                if (z >= d_ouble.display.size()) d_ouble.display.push_back("");
+                d_ouble.display[z] = (results[k].CycleName[z]);
+            }
         }
         for (j = 0; j < beta; j++) {
-            if (results[k].profitOne + results[j].profitOne > single.profit  && (k!=j)
-             && (results[k].Tnames[0] != results[j].Tnames[0])) {
+            if (results[k].profitOne + results[j].profitOne > d_ouble.profit
+                && (k!=j)
+                && (results[k].Tnames[0] != results[j].Tnames[0])
+                && capital < (tracks[results[k].Raceindex[0]].costIn +
+               tracks[results[j].Raceindex[0]].costIn +
+               results[k].totalLoss +
+               results[j].totalLoss)) {
                 d_ouble.profit = results[k].profitOne + results[j].profitOne;
                 d_ouble.indexes[0] = results[k].Raceindex[0];
-                d_ouble.indexes[1] = results[j].Raceindex[1];
+                d_ouble.indexes[1] = results[j].Raceindex[0];
                 d_ouble.track[0] = results[k].Tnames[0];
                 d_ouble.track[1] = results[j].Tnames[0];
                 d_ouble.numCycles = results[k].sizeOf + results[j].sizeOf;
+                for (z = 0; z < results[k].sizeOf; z++) {
+                    if (z >= d_ouble.display.size()) d_ouble.display.push_back("");
+                    d_ouble.display[z] = (results[k].CycleName[z]);
+                }
+                useFlag = 0;
+                for (z = results[k].sizeOf; z < results[k].sizeOf + results[j].sizeOf; z++) {
+                    for (tc = 0; tc < d_ouble.display.size(); tc++) {
+                        if (d_ouble.display[tc] == results[j].CycleName[z - results[k].sizeOf]) {
+                            useFlag++;
+                            d_ouble.numCycles--;
+                        }
+                    }
+                    if (useFlag == 0) {
+                        if (z >= d_ouble.display.size()) d_ouble.display.push_back("");
+                        d_ouble.display[z] = (results[j].CycleName[z - results[k].sizeOf]);
+                    }
+                }
+                useFlag = 0;
             }
         }
     }
+
     //Three track solver.
     for (k = 0; k < beta; k++) {
-        if (results[k].profitThree > triple.profit) {
-            triple.profit = results[k].profitTwo;
+        if (results[k].profitThree > triple.profit
+         && capital > (tracks[results[k].Raceindex[0]].costIn +
+               tracks[results[k].Raceindex[1]].costIn +
+               tracks[results[k].Raceindex[2]].costIn +
+               results[k].totalLoss)) {
+            triple.profit = results[k].profitThree;
             triple.indexes[0] = results[k].Raceindex[0];
             triple.indexes[1] = results[k].Raceindex[1];
             triple.indexes[2] = results[k].Raceindex[2];
@@ -318,11 +370,21 @@ int main(int argc, char* argv[]) {
             triple.track[1] = results[k].Tnames[1];
             triple.track[2] = results[k].Tnames[2];
             triple.numCycles = results[k].sizeOf;
+            for (z = 0; z < results[k].sizeOf; z++) {
+                if (z >= triple.display.size()) triple.display.push_back("");
+                triple.display[z] = results[k].CycleName[z];
+            }
         }
         for (j = 0; j < beta; j++) {
-            if (results[k].profitOne + results[j].profitTwo > triple.profit && (k!=j)
+            if (results[k].profitOne + results[j].profitTwo > triple.profit
+                && (k!=j)
                 && (results[k].Tnames[0] != results[j].Tnames[0])
-                && (results[k].Tnames[0] != results[j].Tnames[1])) {
+                && (results[k].Tnames[0] != results[j].Tnames[1])
+                && capital > (tracks[results[k].Raceindex[0]].costIn +
+               tracks[results[j].Raceindex[0]].costIn +
+               tracks[results[j].Raceindex[1]].costIn +
+               results[k].totalLoss  +
+               results[j].totalLoss)) {
                 triple.profit = results[k].profitOne + results[j].profitTwo;
                 triple.indexes[0] = results[k].Raceindex[0];
                 triple.indexes[1] = results[j].Raceindex[0];
@@ -331,13 +393,40 @@ int main(int argc, char* argv[]) {
                 triple.track[1] = results[j].Tnames[0];
                 triple.track[2] = results[j].Tnames[1];
                 triple.numCycles = results[k].sizeOf + results[j].sizeOf;
+                for (z = 0; z < results[k].sizeOf; z++) {
+                    if (z >= triple.display.size()) triple.display.push_back("");
+                    triple.display[z] = results[k].CycleName[z];
+                }
+
+                useFlag = 0;
+                for (z = results[k].sizeOf; z < results[k].sizeOf + results[j].sizeOf; z++) {
+                    for (tc = 0; tc < triple.display.size(); tc++) {
+                        if (triple.display[tc] == results[j].CycleName[z - results[k].sizeOf]) {
+                            useFlag++;
+                            triple.numCycles--;
+                        }
+                    }
+                    if (useFlag == 0) {
+                        if (z >= triple.display.size()) triple.display.push_back("");
+                        triple.display[z] = results[j].CycleName[z - results[k].sizeOf];
+                    }
+                }
+                useFlag = 0;
             }
             for (i = 0; i < beta; i++) {
                 if (results[k].profitOne + results[j].profitOne + results[i].profitOne > triple.profit
-                    && (k!=j)  && (i!=j)  && (k!=i)
+                    && (k!=j)
+                    && (i!=j)
+                    && (k!=i)
                     && (results[k].Tnames[0] != results[j].Tnames[0])
                     && (results[k].Tnames[0] != results[i].Tnames[0])
-                    && (results[j].Tnames[0] != results[i].Tnames[0])) {
+                    && (results[j].Tnames[0] != results[i].Tnames[0])
+                    && capital > (tracks[results[k].Raceindex[0]].costIn +
+                    tracks[results[j].Raceindex[0]].costIn +
+                    tracks[results[i].Raceindex[0]].costIn +
+                    results[k].totalLoss  +
+                    results[j].totalLoss  +
+                    results[i].totalLoss)) {
                             triple.profit = results[k].profitOne + results[j].profitOne + results[i].profitOne;
                             triple.indexes[0] = results[k].Raceindex[0];
                             triple.indexes[1] = results[j].Raceindex[0];
@@ -346,61 +435,122 @@ int main(int argc, char* argv[]) {
                             triple.track[1] = results[j].Tnames[0];
                             triple.track[2] = results[i].Tnames[0];
                             triple.numCycles = results[k].sizeOf + results[j].sizeOf + results[i].sizeOf;
+                            for (z = 0; z < results[k].sizeOf; z++) {
+                                if (z >= triple.display.size()) triple.display.push_back("");
+                                triple.display[z] = results[k].CycleName[z];
+                            }
+                            useFlag = 0;
+                            for (z = results[k].sizeOf; z < results[k].sizeOf + results[j].sizeOf; z++) {
+                                for (tc = 0; tc < triple.display.size(); tc++) {
+                                    if (triple.display[tc] == results[j].CycleName[z - results[k].sizeOf]) {
+                                        useFlag++;
+                                        triple.numCycles--;
+                                    }
+                                }
+                                if (useFlag == 0) {
+                                    if (z >= triple.display.size()) triple.display.push_back("");
+                                    triple.display[z] = results[j].CycleName[z - results[k].sizeOf];
+                                }
+                            }
+                            useFlag = 0;
+                            for (z = results[k].sizeOf + results[j].sizeOf;
+                                z < results[k].sizeOf + results[j].sizeOf + results[i].sizeOf;
+                                z++) {
+                                for (tc = 0; tc < triple.display.size(); tc++) {
+                                    if (triple.display[tc] == results[i].CycleName[z - (results[k].sizeOf + results[j].sizeOf)]) {
+                                        useFlag++;
+                                        triple.numCycles--;
+                                    }
+                                }
+                                if (useFlag == 0) {
+                                    if (z >= triple.display.size()) triple.display.push_back("");
+                                    triple.display[z] = results[i].CycleName[z - (results[k].sizeOf + results[j].sizeOf)];
+                                }
+                            }
+                            useFlag = 0;
                 }
             }
         }
     }
 
     int bestBet = 0;
-
-    string outName = "result.txt";
+//    cout << "I get up to file writing" << endl;
+    string outName = "myresult.txt";
     ofstream outFile;
     outFile.open(&outName[0], ios::out | ios::trunc);
+    outFile << argv[1] << " " << argv[2] << endl;
 
-    if (single.profit >= d_ouble.profit && single.profit >= triple.profit) {
+    if ((single.profit >= d_ouble.profit) && (single.profit >= triple.profit)) {
         cout << "single race " << single.profit << endl;
-        outFile << single.track[0] << endl;
+        for (k = 0; k < single.numCycles; k++) {
+            outFile << single.display[k] << endl;
+        }
+        outFile << tracks[single.indexes[0]].name << " " << tracks[single.indexes[0]].numCycles;
+        outFile << endl;
         outFile.close();
-        single_race_output(&tracks[single.indexes[0]].name[0], tracks[single.indexes[0]].cycles, tracks[single.indexes[0]].numCycles, &outName[0]);
+        single_race_output(&tracks[single.indexes[0]].name[0], tracks[single.indexes[0]].cycles,
+                            tracks[single.indexes[0]].numCycles, &outName[0]);
         outFile.open(&outName[0], ios::out | ios::app);
-        outFile << single.profit + capital << endl;
+        outFile << single.profit << endl;
         outFile.close();
-    } else if (triple.profit <= d_ouble.profit && single.profit <= d_ouble.profit) {
+    } else if ((triple.profit <= d_ouble.profit) && (single.profit <= d_ouble.profit)) {
         cout << "two races " << d_ouble.profit << endl;
-        outFile << d_ouble.track[0] << endl;
+        for (k = 0; k < d_ouble.numCycles; k++) {
+            outFile << d_ouble.display[k] << endl;
+        }
+        outFile << tracks[d_ouble.indexes[0]].name << " " << tracks[d_ouble.indexes[0]].numCycles << " ";
+        outFile << tracks[d_ouble.indexes[1]].name << " " << tracks[d_ouble.indexes[1]].numCycles;
+        outFile << endl;
         outFile.close();
-        single_race_output(&tracks[d_ouble.indexes[0]].name[0], tracks[d_ouble.indexes[0]].cycles, tracks[d_ouble.indexes[0]].numCycles, &outName[0]);
+        single_race_output(&tracks[d_ouble.indexes[0]].name[0], tracks[d_ouble.indexes[0]].cycles,
+                                    tracks[d_ouble.indexes[0]].numCycles, &outName[0]);
+        single_race_output(&tracks[d_ouble.indexes[1]].name[0], tracks[d_ouble.indexes[1]].cycles,
+                                tracks[d_ouble.indexes[1]].numCycles, &outName[0]);
         outFile.open(&outName[0], ios::out | ios::app);
-        outFile << d_ouble.track[1] << endl;
+        outFile << d_ouble.profit << endl;
         outFile.close();
-        single_race_output(&tracks[d_ouble.indexes[1]].name[0], tracks[d_ouble.indexes[1]].cycles, tracks[d_ouble.indexes[1]].numCycles, &outName[0]);
-        outFile.open(&outName[0], ios::out | ios::app);
-        outFile << d_ouble.profit + capital << endl;
-        outFile.close();
-    } else if (triple.profit >= d_ouble.profit && single.profit <= triple.profit) {
+    } else if ((triple.profit >= d_ouble.profit) && (single.profit <= triple.profit)) {
         cout << "three races " << triple.profit << endl;
-        outFile << triple.track[0] << endl;
+        for (k = 0; k < triple.numCycles; k++) {
+            outFile << triple.display[k] << endl;
+        }
+        outFile << tracks[triple.indexes[0]].name << " " << tracks[triple.indexes[0]].numCycles << " ";
+        outFile << tracks[triple.indexes[1]].name << " " << tracks[triple.indexes[1]].numCycles << " ";
+        outFile << tracks[triple.indexes[2]].name << " " << tracks[triple.indexes[2]].numCycles;
+        outFile << endl;
         outFile.close();
-        single_race_output(&tracks[triple.indexes[0]].name[0], tracks[triple.indexes[0]].cycles, tracks[triple.indexes[0]].numCycles, &outName[0]);
+        single_race_output(&tracks[triple.indexes[0]].name[0], tracks[triple.indexes[0]].cycles,
+                            tracks[triple.indexes[0]].numCycles, &outName[0]);
+        single_race_output(&tracks[triple.indexes[1]].name[0], tracks[triple.indexes[1]].cycles,
+                            tracks[triple.indexes[1]].numCycles, &outName[0]);
+        single_race_output(&tracks[triple.indexes[2]].name[0], tracks[triple.indexes[2]].cycles,
+                            tracks[triple.indexes[2]].numCycles, &outName[0]);
         outFile.open(&outName[0], ios::out | ios::app);
-        outFile << triple.track[1] << endl;
-        outFile.close();
-        single_race_output(&tracks[triple.indexes[1]].name[0], tracks[triple.indexes[1]].cycles, tracks[triple.indexes[1]].numCycles, &outName[0]);
-        outFile.open(&outName[0], ios::out | ios::app);
-        outFile << triple.track[2] << endl;
-        outFile.close();
-        single_race_output(&tracks[triple.indexes[2]].name[0], tracks[triple.indexes[2]].cycles, tracks[triple.indexes[2]].numCycles, &outName[0]);
-        outFile.open(&outName[0], ios::out | ios::app);
-        outFile << triple.profit + capital << endl;
+        outFile << triple.profit << endl;
         outFile.close();
     }
 
+//    Memory cleanup.
+    delete [] single.track;
+    delete [] single.indexes;
+    delete [] d_ouble.track;
+    delete [] d_ouble.indexes;
+    delete [] triple.track;
+    delete [] triple.indexes;
+//
+//
+    for (i=0; i < beta; i++) {
+//        delete [] results[i].bestResults;
+//        delete [] results[i].CycleName;
+//        delete [] results[i].Tnames;
+//        delete [] results[i].Raceindex;
+        delete [] allCombos[i];
+    }
+    delete [] allCombos;
 
-    //Memory cleanup.
     for (j = 0; j < tCount; j++) {
         delete [] tracks[j].cycles;
     }
 
-    delete [] allCombos;
     return 0;
 }
