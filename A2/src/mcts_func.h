@@ -8,7 +8,7 @@ float traverse_cell(TronCycle * me, Node * thisNode, float p) {
     //If there is a distractor in the cell, cause some damage
     //based on E[distractor].
     if (thisNode->isDist() && me->reliability == 'N') {
-        thisNode->reward -= 1.5*p;
+        thisNode->reward -= 2.5*p;
         thisNode->visits++;
 
     } else if (thisNode->isDist() && me->reliability == 'R') {
@@ -17,13 +17,13 @@ float traverse_cell(TronCycle * me, Node * thisNode, float p) {
 
     //If there is an obstacle in the cell, cause some more damage.
     } else if (thisNode->obs_true && me->durability == 'W') {
-        thisNode->reward += 0.8*p;
+        thisNode->reward += 0.7*p;
         thisNode->visits++;
 
     //Note that this cell will have 0 visits for  domestic cycles,
     //so will almost certainly be removed from the tree during pruning.
     }  else if (thisNode->obs_true && me->durability == 'D') {
-        thisNode->reward -= 2.0*p;
+        thisNode->reward -= 1.0*p;
         thisNode->visits++;
 
     //Otherwise, assume it is a clearway.
@@ -60,13 +60,13 @@ float execute_action(int action, TronCycle * me, Node *** allNodes, int depth, i
             z = traverse_cell(me, &(*allNodes)[move_to_edge(y+1, depth)][move_to_edge(x+1, length)], 1.0);
             break;
         case 5:
-            z = traverse_cell(me, &(*allNodes)[y][x], 0.4);
+            z = traverse_cell(me, &(*allNodes)[y][x], 0.45);
             if (me->ImaChurch == 1) {
                 (*allNodes)[y][x].block_true = me->ImaChurch;
             }
             break;
         case 6:
-            z = traverse_cell(me, &(*allNodes)[y][x], 0.40);
+            z = traverse_cell(me, &(*allNodes)[y][x], 0.45);
             if (me->ImaChurch == 1) {
                 me->ImaChurch = 0;
                 (*allNodes)[y][x].block_true = me->ImaChurch;
@@ -399,7 +399,7 @@ void simulate_game(GameTree ** theTruth, int length, int depth, TronCycle ** me,
         //If I win this simulation, backtrack, and boost reward for actions.
         if (YayFlag > 0) {
             for (i = 0; i < num; i++) {
-                update_gametree_sim(simTree[i], 2.5);
+                update_gametree_sim(simTree[i], 6.5);
                 update_gametree(theTruth[i], simTree[i]);
                 autoPilot[i]->posx = me[i]->posx;
                 autoPilot[i]->posy = me[i]->posy;
@@ -430,7 +430,7 @@ void simulate_game(GameTree ** theTruth, int length, int depth, TronCycle ** me,
         //If the opponents win, backtrack and reset the map.
         if (DoomFlag > 0) {
             for (i = 0; i < num; i++) {
-                update_gametree_sim(simTree[i], -0.09);
+                update_gametree_sim(simTree[i], -0.29);
                 update_gametree(theTruth[i], simTree[i]);
                 autoPilot[i]->posx = me[i]->posx;
                 autoPilot[i]->posy = me[i]->posy;
@@ -457,7 +457,7 @@ void simulate_game(GameTree ** theTruth, int length, int depth, TronCycle ** me,
     DoomFlag = 0;
     simSteps = 0;
 
-    while (simSteps < 35/num) {
+    while (simSteps < 14/num) {
 //        cout << "sim 2 loop" << endl;
         for (i = 0; i < num; i++) {
             if (simTree[i]->steps >= maxSteps) {
@@ -482,7 +482,7 @@ void simulate_game(GameTree ** theTruth, int length, int depth, TronCycle ** me,
             DoomFlag = 0;
             YayFlag = 0;
             for ( i = 0; i < num; i++) {
-                update_gametree_sim(simTree[i], 2.5);
+                update_gametree_sim(simTree[i], 8.5);
                 update_gametree(theTruth[i], simTree[i]);
                 simTree[i]->steps = 0;
                 autoPilot[i]->posx = me[i]->posx;
@@ -515,7 +515,7 @@ void simulate_game(GameTree ** theTruth, int length, int depth, TronCycle ** me,
             DoomFlag = 0;
             YayFlag = 0;
             for ( i = 0; i < num; i++) {
-                update_gametree_sim(simTree[i], -0.09);
+                update_gametree_sim(simTree[i], -0.39);
                 update_gametree(theTruth[i], simTree[i]);
                 simTree[i]->steps = 0;
                 autoPilot[i]->posx = me[i]->posx;
